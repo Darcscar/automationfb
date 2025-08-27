@@ -23,7 +23,7 @@ FB_GRAPH = "https://graph.facebook.com/v19.0"
 # Config
 # ---------------------
 FOODPANDA_URL = "https://www.foodpanda.ph/restaurant/locg/pedros-old-manila-rd"
-MENU_URL = "https://darcscar.github.io/menu.pdf"
+MENU_URL = "https://imgur.com/a/byqpSBq"
 PHONE_NUMBER = "0424215968"
 
 # ---------------------
