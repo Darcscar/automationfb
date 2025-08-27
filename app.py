@@ -29,7 +29,7 @@ FB_GRAPH = "https://graph.facebook.com/v19.0"
 FOODPANDA_URL = "https://www.foodpanda.ph/restaurant/locg/pedros-old-manila-rd"
 MENU_URL = "https://imgur.com/a/byqpSBq"
 PHONE_NUMBER = "0424215968"
-GOOGLE_MAP_URL = "https://goo.gl/maps/your_location_here"  # Replace with your Google Maps link
+GOOGLE_MAP_URL = "https://maps.app.goo.gl/GQUDgxLqgW6no26X8"  # Replace with your Google Maps link
 OPEN_TIME = time(10, 0)  # 10:00 AM
 CLOSE_TIME = time(22, 0)  # 10:00 PM
 
