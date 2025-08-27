@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # ---------------------
 # Tokens
 # ---------------------
-PAGE_ACCESS_TOKEN = "YOUR_PAGE_ACCESS_TOKEN"
+PAGE_ACCESS_TOKEN = "EAHJTYAULctYBPU2QsZCocyqjZBHakvyMR95h0ZCAZACW076ARf8QZAUAgwJ6crkVivna5teNDUlLEVWvxzGKlBlocpvr21iotTels4nZBS6loaMx0eZBCA79R36oXy1uVnIRSJgyhdPZBSSaNeewk59ne2bv9eBZCHpqLRnZBLMsF14ofaZAaSIyje2yXBSTTbOxoZBOVisF3T2zBQZDZD"
 VERIFY_TOKEN = "123darcscar"
 FB_GRAPH = "https://graph.facebook.com/v19.0"
 
