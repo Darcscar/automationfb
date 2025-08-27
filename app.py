@@ -3,6 +3,7 @@ import json
 import logging
 from flask import Flask, request, Response
 import requests
+from datetime import datetime, time
 
 app = Flask(__name__)
 
@@ -28,6 +29,9 @@ FB_GRAPH = "https://graph.facebook.com/v19.0"
 FOODPANDA_URL = "https://www.foodpanda.ph/restaurant/locg/pedros-old-manila-rd"
 MENU_URL = "https://imgur.com/a/byqpSBq"
 PHONE_NUMBER = "0424215968"
+GOOGLE_MAP_URL = "https://goo.gl/maps/your_location_here"  # Replace with your Google Maps link
+OPEN_TIME = time(10, 0)  # 10:00 AM
+CLOSE_TIME = time(22, 0)  # 10:00 PM
 
 # ---------------------
 # Helper: Send message
@@ -49,9 +53,28 @@ def call_send_api(psid, message_data):
         return None
 
 # ---------------------
+# Check store hours
+# ---------------------
+def is_store_open():
+    now = datetime.now().time()
+    if OPEN_TIME <= now <= CLOSE_TIME:
+        return True
+    return False
+
+def store_closed_message():
+    now = datetime.now().time()
+    if now < OPEN_TIME:
+        return f"🌅 Good morning! The store will open at {OPEN_TIME.strftime('%I:%M %p')}."
+    else:
+        return f"🌙 Sorry, the store is closed now. We’ll open tomorrow at {OPEN_TIME.strftime('%I:%M %p')}."
+
+# ---------------------
 # Quick Replies Menu
 # ---------------------
 def send_quick_replies(psid):
+    if not is_store_open():
+        return call_send_api(psid, {"text": store_closed_message()})
+    
     msg = {
         "text": "Welcome! Please choose an option:",
         "quick_replies": [
@@ -59,6 +82,7 @@ def send_quick_replies(psid):
             {"content_type": "text", "title": "🛵 Order on Foodpanda", "payload": "Q_FOODPANDA"},
             {"content_type": "text", "title": "🍴 Advance Order", "payload": "Q_ADVANCE_ORDER"},
             {"content_type": "text", "title": "📞 Contact Us", "payload": "Q_CONTACT"},
+            {"content_type": "text", "title": "📍 Location", "payload": "Q_LOCATION"},
         ]
     }
     return call_send_api(psid, msg)
@@ -100,6 +124,8 @@ def send_contact_info(psid):
 def handle_payload(psid, payload):
     if not payload or payload == "GET_STARTED":
         return send_quick_replies(psid)
+    if not is_store_open():
+        return call_send_api(psid, {"text": store_closed_message()})
     if payload == "Q_VIEW_MENU":
         return send_menu(psid)
     if payload == "Q_ADVANCE_ORDER":
@@ -108,6 +134,9 @@ def handle_payload(psid, payload):
         return send_contact_info(psid)
     if payload == "Q_FOODPANDA":
         call_send_api(psid, {"text": f"Order online here: {FOODPANDA_URL}"})
+        return send_quick_replies(psid)
+    if payload == "Q_LOCATION":
+        call_send_api(psid, {"text": f"📍 Find us here: {GOOGLE_MAP_URL}"})
         return send_quick_replies(psid)
     return send_quick_replies(psid)
 
