@@ -123,9 +123,17 @@ def send_contact_info(psid):
 # ---------------------
 def handle_payload(psid, payload):
     if not payload or payload == "GET_STARTED":
+        # Send welcome message first
+        welcome_text = (
+            "Hi! Thanks for messaging Pedro’s Classic and Asian Cuisine 🍗🍳🥩\n"
+            "For quick orders, call us at 0917 150 5518 or (042)421 5968. 🥰"
+        )
+        call_send_api(psid, {"text": welcome_text})
         return send_quick_replies(psid)
+    
     if not is_store_open():
         return call_send_api(psid, {"text": store_closed_message()})
+    
     if payload == "Q_VIEW_MENU":
         return send_menu(psid)
     if payload == "Q_ADVANCE_ORDER":
@@ -138,6 +146,7 @@ def handle_payload(psid, payload):
     if payload == "Q_LOCATION":
         call_send_api(psid, {"text": f"📍 Find us here: {GOOGLE_MAP_URL}"})
         return send_quick_replies(psid)
+    
     return send_quick_replies(psid)
 
 # ---------------------
