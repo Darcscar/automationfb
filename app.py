@@ -16,7 +16,10 @@ logger = logging.getLogger("FBBot")
 # ---------------------
 # Tokens
 # ---------------------
-PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "YOUR_PAGE_ACCESS_TOKEN")
+PAGE_ACCESS_TOKEN = os.getenv(
+    "PAGE_ACCESS_TOKEN",
+    "EAHJTYAULctYBPU2QsZCocyqjZBHakvyMR95h0ZCAZACW076ARf8QZAUAgwJ6crkVivna5teNDUlLEVWvxzGKlBlocpvr21iotTels4nZBS6loaMx0eZBCA79R36oXy1uVnIRSJgyhdPZBSSaNeewk59ne2bv9eBZCHpqLRnZBLMsF14ofaZAaSIyje2yXBSTTbOxoZBOVisF3T2zBQZDZD"
+)
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "123darcscar")
 FB_GRAPH = "https://graph.facebook.com/v19.0"
 
@@ -24,7 +27,7 @@ FB_GRAPH = "https://graph.facebook.com/v19.0"
 # Config
 # ---------------------
 FOODPANDA_URL = "https://www.foodpanda.ph/restaurant/locg/pedros-old-manila-rd"
-MENU_IMAGE_URL = "https://i.imgur.com/josQM5k.jpeg"
+MENU_URL = "https://i.imgur.com/josQM5k.jpeg"
 GOOGLE_MAP_URL = "https://maps.app.goo.gl/GQUDgxLqgW6no26X8"
 PHONE_NUMBER = "0424215968"
 OPEN_TIME = time(10, 0)  # 10:00 AM
@@ -64,88 +67,61 @@ def store_closed_message():
         return f"🌙 Sorry, the store is closed now. We’ll open tomorrow at {OPEN_TIME.strftime('%I:%M %p')}."
 
 # ---------------------
-# Quick Replies / Main Menu
+# Quick Replies Menu
 # ---------------------
 def send_main_menu(psid):
+    """Always send menu with quick replies."""
     msg = {
         "text": "Please choose an option:",
         "quick_replies": [
             {"content_type": "text", "title": "📋 Menu", "payload": "Q_VIEW_MENU"},
             {"content_type": "text", "title": "🛵 Foodpanda", "payload": "Q_FOODPANDA"},
             {"content_type": "text", "title": "🍴 Advance Order", "payload": "Q_ADVANCE_ORDER"},
-            {"content_type": "text", "title": "📞 Contact Us", "payload": "Q_CONTACT"},
+            {"content_type": "text", "title": "📞 Contact", "payload": "Q_CONTACT"},
             {"content_type": "text", "title": "📍 Location", "payload": "Q_LOCATION"},
         ]
     }
     return call_send_api(psid, msg)
 
 # ---------------------
-# Actions
+# Other Messages
 # ---------------------
 def send_menu(psid):
-    # Show menu inline as image with a button to open full image
-    msg = {
-        "attachment": {
-            "type": "template",
-            "payload": {
-                "template_type": "generic",
-                "elements": [
-                    {
-                        "title": "📋 Our Menu",
-                        "image_url": MENU_IMAGE_URL,
-                        "buttons": [
-                            {"type": "web_url", "url": MENU_IMAGE_URL, "title": "View Full Menu", "webview_height_ratio": "full"}
-                        ]
-                    }
-                ]
-            }
-        }
-    }
+    """Send menu link immediately."""
+    msg = {"attachment": {"type": "image", "payload": {"url": MENU_URL}}}
     return call_send_api(psid, msg)
 
 def send_foodpanda(psid):
-    msg = {
-        "attachment": {
-            "type": "template",
-            "payload": {
-                "template_type": "button",
-                "text": "🛵 Order online via Foodpanda:",
-                "buttons": [{"type": "web_url", "url": FOODPANDA_URL, "title": "Open Foodpanda", "webview_height_ratio": "full"}]
-            }
-        }
-    }
+    """Send Foodpanda link immediately."""
+    msg = {"text": f"Order online here: {FOODPANDA_URL}"}
     return call_send_api(psid, msg)
 
 def send_location(psid):
-    msg = {
-        "attachment": {
-            "type": "template",
-            "payload": {
-                "template_type": "button",
-                "text": "📍 Find us here:",
-                "buttons": [{"type": "web_url", "url": GOOGLE_MAP_URL, "title": "Open Location", "webview_height_ratio": "full"}]
-            }
-        }
-    }
+    """Send Google Maps link immediately."""
+    msg = {"text": f"📍 Find us here: {GOOGLE_MAP_URL}"}
     return call_send_api(psid, msg)
 
 def send_advance_order_info(psid):
-    text = (
-        "✅ We accept advance orders!\n\n"
-        "• For Foodpanda: schedule inside the app.\n"
-        "• For dine-in/pickup: reply here with your order and time.\n"
-        "We’ll have it ready fresh. 🕑✨"
-    )
-    call_send_api(psid, {"text": text})
+    """Show advance order only if store is open, else show closed message."""
+    if is_store_open():
+        text = (
+            "✅ We accept advance orders!\n\n"
+            "• For Foodpanda: schedule inside the app.\n"
+            "• For dine-in/pickup: reply here with your order and time.\n"
+            "We’ll have it ready fresh. 🕑✨"
+        )
+        call_send_api(psid, {"text": text})
+    else:
+        call_send_api(psid, {"text": store_closed_message()})
     return send_main_menu(psid)
 
 def send_contact_info(psid):
-    text = f"📞 Contact us at {PHONE_NUMBER} or reply here and a staff member will assist you."
-    call_send_api(psid, {"text": text})
+    """Send contact info immediately."""
+    call_send_api(psid, {"text": f"📞 Contact us at {PHONE_NUMBER}"})
     return send_main_menu(psid)
 
 # ---------------------
-# Handle Payloads
+# Handle payloads
 # ---------------------
 def handle_payload(psid, payload):
     if not payload or payload == "GET_STARTED":
@@ -156,7 +132,6 @@ def handle_payload(psid, payload):
         call_send_api(psid, {"text": welcome_text})
         return send_main_menu(psid)
 
-    # Even if store closed, allow menu/location/Foodpanda
     if payload == "Q_VIEW_MENU":
         return send_menu(psid)
     if payload == "Q_FOODPANDA":
@@ -164,11 +139,7 @@ def handle_payload(psid, payload):
     if payload == "Q_LOCATION":
         return send_location(psid)
     if payload == "Q_ADVANCE_ORDER":
-        if is_store_open():
-            return send_advance_order_info(psid)
-        else:
-            call_send_api(psid, {"text": store_closed_message()})
-            return send_main_menu(psid)
+        return send_advance_order_info(psid)
     if payload == "Q_CONTACT":
         return send_contact_info(psid)
 
@@ -192,7 +163,6 @@ def webhook():
     if request.method == "POST":
         data = request.get_json()
         logger.info(f"Incoming webhook event: {json.dumps(data, indent=2)}")
-
         if data.get("object") == "page":
             for entry in data.get("entry", []):
                 for event in entry.get("messaging", []):
@@ -200,7 +170,6 @@ def webhook():
                     if not psid:
                         continue
                     logger.info(f"New PSID: {psid}")
-
                     if "message" in event:
                         msg = event["message"]
                         if msg.get("quick_reply"):
@@ -208,9 +177,7 @@ def webhook():
                         elif "text" in msg:
                             send_main_menu(psid)
                     elif "postback" in event:
-                        payload = event["postback"].get("payload")
-                        handle_payload(psid, payload)
-
+                        handle_payload(psid, event["postback"].get("payload"))
         return Response("EVENT_RECEIVED", status=200)
 
 # ---------------------
