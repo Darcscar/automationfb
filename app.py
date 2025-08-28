@@ -151,19 +151,22 @@ def handle_payload(psid, payload=None, text_message=None):
         return
 
     # If waiting for advance order text
-    if user_states.get(psid) == "awaiting_order" and text_message:
-        try:
-            requests.post(
-                "https://n8n-kbew.onrender.com/webhook/advance-order",
-                json={"psid": psid, "order": text_message},
-                timeout=10
-            )
-        except Exception as e:
-            logger.error(f"n8n forwarding error: {e}")
+ if user_states.get(psid) == "awaiting_order" and text_message:
+    try:
+        # Replace this with your public Render URL for the n8n webhook
+        n8n_webhook_url = "https://n8n-kbew.onrender.com/webhook/advance-order"
 
-        call_send_api(psid, {"text": "✅ Your advance order has been received. Thank you!"})
-        user_states.pop(psid, None)
-        return send_main_menu(psid)
+        requests.post(
+            n8n_webhook_url,
+            json={"psid": psid, "order": text_message},
+            timeout=10
+        )
+    except Exception as e:
+        logger.error(f"n8n forwarding error: {e}")
+
+    call_send_api(psid, {"text": "✅ Your advance order has been received. Thank you!"})
+    user_states.pop(psid, None)
+    return send_main_menu(psid)
 
     # Button actions
     if payload == "Q_VIEW_MENU":
