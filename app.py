@@ -166,4 +166,34 @@ def webhook():
     if request.method == "GET":
         mode = request.args.get("hub.mode")
         token = request.args.get("hub.verify_token")
-        challenge = request.args.get("hub.cha
+        challenge = request.args.get("hub.challenge")
+        if mode == "subscribe" and token == VERIFY_TOKEN:
+            return Response(challenge, status=200, mimetype="text/plain")
+        return Response("Forbidden", status=403)
+
+    if request.method == "POST":
+        data = request.get_json()
+        if data.get("object") == "page":
+            for entry in data.get("entry", []):
+                for event in entry.get("messaging", []):
+                    psid = event.get("sender", {}).get("id")
+                    if not psid:
+                        continue
+
+                    if "message" in event:
+                        msg = event["message"]
+                        if msg.get("quick_reply"):
+                            handle_payload(psid, msg["quick_reply"].get("payload"))
+                        elif "text" in msg:
+                            if user_state.get(psid):
+                                handle_advance_order(psid, msg["text"])
+                            else:
+                                send_main_menu(psid)
+                    elif "postback" in event:
+                        handle_payload(psid, event["postback"].get("payload"))
+
+        return Response("EVENT_RECEIVED", status=200)
+
+if __name__ == "__main__":
+    PORT = int(os.getenv("PORT", 10000))
+    app.run(host="0.0.0.0", port=PORT, debug=True)
