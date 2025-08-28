@@ -161,7 +161,8 @@ def handle_payload(psid, payload=None, text_message=None):
                 timeout=15
             )
             logger.info(f"📤 n8n response status: {resp.status_code}")
-        except Exception as e:
+            logger.info(f"📤 n8n response body: {resp.text}")
+        except requests.exceptions.RequestException as e:
             logger.error(f"❌ n8n forwarding error: {e}")
 
         call_send_api(psid, {"text": "✅ Your advance order has been received. Thank you!"})
