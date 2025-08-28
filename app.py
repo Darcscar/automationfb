@@ -27,8 +27,11 @@ FOODPANDA_URL = "https://www.foodpanda.ph/restaurant/locg/pedros-old-manila-rd"
 MENU_URL = "https://i.imgur.com/josQM5k.jpeg"
 GOOGLE_MAP_URL = "https://maps.app.goo.gl/GQUDgxLqgW6no26X8"
 PHONE_NUMBER = "0424215968"
-OPEN_TIME = time(10, 0)  # 10:00 AM
+OPEN_TIME = time(10, 0)   # 10:00 AM
 CLOSE_TIME = time(22, 0)  # 10:00 PM
+
+# Track user states (advance order flow)
+user_states = {}
 
 # ---------------------
 # Helper: Send message
@@ -68,58 +71,30 @@ def store_closed_message():
 # ---------------------
 def send_main_menu(psid):
     msg = {
-        "text": "Please choose an option:",
+        "text": "👇 Please choose an option:",
         "quick_replies": [
             {"content_type": "text", "title": "📋 Menu", "payload": "Q_VIEW_MENU"},
-            {"content_type": "text", "title": "🛵 Order on Foodpanda", "payload": "Q_FOODPANDA"},
-            {"content_type": "text", "title": "🍴 Advance Order", "payload": "Q_ADVANCE_ORDER"},
-            {"content_type": "text", "title": "📞 Contact Us", "payload": "Q_CONTACT"},
+            {"content_type": "text", "title": "🛵 Foodpanda", "payload": "Q_FOODPANDA"},
+            {"content_type": "text", "title": "📝 Advance Order", "payload": "Q_ADVANCE_ORDER"},
             {"content_type": "text", "title": "📍 Location", "payload": "Q_LOCATION"},
+            {"content_type": "text", "title": "📞 Contact Us", "payload": "Q_CONTACT"},
         ]
     }
     return call_send_api(psid, msg)
 
 # ---------------------
-# Send button templates
+# Button templates
 # ---------------------
 def send_menu(psid):
-    msg = {
-        "attachment": {
-            "type": "template",
-            "payload": {
-                "template_type": "button",
-                "text": "📋 Full Menu",
-                "buttons": [{"type": "web_url", "url": MENU_URL, "title": "Open Menu", "webview_height_ratio": "full"}],
-            }
-        }
-    }
-    return call_send_api(psid, msg)
+    return call_send_api(psid, {
+        "attachment": {"type": "image", "payload": {"url": MENU_URL, "is_reusable": True}}
+    })
 
 def send_foodpanda(psid):
-    msg = {
-        "attachment": {
-            "type": "template",
-            "payload": {
-                "template_type": "button",
-                "text": "🛵 Order on Foodpanda",
-                "buttons": [{"type": "web_url", "url": FOODPANDA_URL, "title": "Open Foodpanda"}],
-            }
-        }
-    }
-    return call_send_api(psid, msg)
+    return call_send_api(psid, {"text": f"🛵 Order now on Foodpanda:\n{FOODPANDA_URL}"})
 
 def send_location(psid):
-    msg = {
-        "attachment": {
-            "type": "template",
-            "payload": {
-                "template_type": "button",
-                "text": "📍 Our Location",
-                "buttons": [{"type": "web_url", "url": GOOGLE_MAP_URL, "title": "View Map"}],
-            }
-        }
-    }
-    return call_send_api(psid, msg)
+    return call_send_api(psid, {"text": f"📍 Pedro’s Classic and Asian Cuisine\n{GOOGLE_MAP_URL}"})
 
 def send_contact_info(psid):
     text = f"📞 Contact us at {PHONE_NUMBER} or reply here and a staff member will assist you."
@@ -130,30 +105,39 @@ def send_contact_info(psid):
 # Handle payloads
 # ---------------------
 def handle_payload(psid, payload=None, text_message=None):
-    now = datetime.now().time()
-
     # GET_STARTED greeting
     if payload == "GET_STARTED":
         welcome_text = (
-            "Hi! Thanks for messaging Pedro’s Classic and Asian Cuisine 🍗🍳🥩\n"
-            "For quick orders, call us at 0917 150 5518 or (042)421 5968. 🥰"
+            "Hi! Thanks for messaging Pedro’s Classic and Asian Cuisine 🥰🍗🍳🥩\n\n"
+            "For quick orders, call us at 0917 150 5518 or (042)421 5968."
         )
         call_send_api(psid, {"text": welcome_text})
         return send_main_menu(psid)
 
-    # Advance Order: capture any text typed by user
-    if payload == "Q_ADVANCE_ORDER" or text_message:
-        # Forward to n8n webhook (uncomment and set your webhook)
-        # requests.post("https://n8n-webhook-url", json={"psid": psid, "message": text_message})
-        logger.info(f"Advance order from {psid}: {text_message}")
-        call_send_api(psid, {"text": "✅ Your advance order has been received and will be prepared once the store opens."})
+    # Advance Order start
+    if payload == "Q_ADVANCE_ORDER":
+        call_send_api(psid, {"text": "📝 Sure! Please type your order below:"})
+        user_states[psid] = "awaiting_order"
+        return
+
+    # If waiting for advance order text
+    if psid in user_states and user_states[psid] == "awaiting_order" and text_message:
+        # Forward to n8n webhook
+        try:
+            requests.post("https://your-n8n-webhook.url/webhook/advance-order",
+                          json={"psid": psid, "order": text_message}, timeout=10)
+        except Exception as e:
+            logger.error(f"n8n forwarding error: {e}")
+
+        call_send_api(psid, {"text": "✅ Your advance order has been received. It will be prepared once the store opens."})
+        user_states.pop(psid, None)
         return send_main_menu(psid)
 
     # Normal inquiries outside store hours
-    if not is_store_open():
+    if payload not in ["Q_ADVANCE_ORDER"] and text_message is None and not is_store_open():
         return call_send_api(psid, {"text": store_closed_message()})
 
-    # Buttons actions
+    # Main actions
     if payload == "Q_VIEW_MENU":
         return send_menu(psid)
     if payload == "Q_FOODPANDA":
@@ -191,7 +175,6 @@ def webhook():
                     psid = event.get("sender", {}).get("id")
                     if not psid:
                         continue
-                    logger.info(f"New PSID: {psid}")
 
                     if "message" in event:
                         msg = event["message"]
