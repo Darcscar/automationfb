@@ -16,10 +16,7 @@ logger = logging.getLogger("FBBot")
 # ---------------------
 # Tokens
 # ---------------------
-PAGE_ACCESS_TOKEN = os.getenv(
-    "PAGE_ACCESS_TOKEN",
-    "EAHJTYAULctYBPU2QsZCocyqjZBHakvyMR95h0ZCAZACW076ARf8QZAUAgwJ6crkVivna5teNDUlLEVWvxzGKlBlocpvr21iotTels4nZBS6loaMx0eZBCA79R36oXy1uVnIRSJgyhdPZBSSaNeewk59ne2bv9eBZCHpqLRnZBLMsF14ofaZAaSIyje2yXBSTTbOxoZBOVisF3T2zBQZDZD"
-)
+PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "YOUR_PAGE_ACCESS_TOKEN")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "123darcscar")
 FB_GRAPH = "https://graph.facebook.com/v19.0"
 
@@ -30,8 +27,8 @@ FOODPANDA_URL = "https://www.foodpanda.ph/restaurant/locg/pedros-old-manila-rd"
 MENU_URL = "https://i.imgur.com/josQM5k.jpeg"
 GOOGLE_MAP_URL = "https://maps.app.goo.gl/GQUDgxLqgW6no26X8"
 PHONE_NUMBER = "0424215968"
-OPEN_TIME = time(10, 0)  # 10:00 AM
-CLOSE_TIME = time(22, 0)  # 10:00 PM
+OPEN_TIME = time(10, 0)
+CLOSE_TIME = time(22, 0)
 
 # ---------------------
 # Helper: Send message
@@ -53,21 +50,44 @@ def call_send_api(psid, message_data):
         return None
 
 # ---------------------
-# Check store hours
+# Messages
 # ---------------------
-def is_store_open():
-    now = datetime.now().time()
-    return OPEN_TIME <= now <= CLOSE_TIME
+def send_button_template(psid, text, buttons):
+    msg = {
+        "attachment": {
+            "type": "template",
+            "payload": {
+                "template_type": "button",
+                "text": text,
+                "buttons": buttons
+            }
+        }
+    }
+    return call_send_api(psid, msg)
 
-def store_closed_message():
+def send_menu(psid):
+    buttons = [{"type": "web_url", "url": MENU_URL, "title": "Open Menu", "webview_height_ratio": "full"}]
+    return send_button_template(psid, "📋 Here’s our menu:", buttons)
+
+def send_foodpanda(psid):
+    buttons = [{"type": "web_url", "url": FOODPANDA_URL, "title": "Order on Foodpanda"}]
+    return send_button_template(psid, "🛵 Order online:", buttons)
+
+def send_location(psid):
+    buttons = [{"type": "web_url", "url": GOOGLE_MAP_URL, "title": "View Location"}]
+    return send_button_template(psid, "📍 Our location:", buttons)
+
+def send_contact_info(psid):
+    return call_send_api(psid, {"text": f"📞 Contact us at {PHONE_NUMBER}"})
+
+def prompt_advance_order(psid):
     now = datetime.now().time()
     if now < OPEN_TIME:
-        return f"🌅 Good morning! The store will open at {OPEN_TIME.strftime('%I:%M %p')}."
-    else:
-        return f"🌙 Sorry, the store is closed now. We’ll open tomorrow at {OPEN_TIME.strftime('%I:%M %p')}."
+        return call_send_api(psid, {"text": f"📝 You can place your advance order now. It will be prepared once the store opens at {OPEN_TIME.strftime('%I:%M %p')}."})
+    return call_send_api(psid, {"text": "📝 Please type your advance order now."})
 
 # ---------------------
-# Quick Replies Menu
+# Quick Replies
 # ---------------------
 def send_main_menu(psid):
     msg = {
@@ -83,32 +103,10 @@ def send_main_menu(psid):
     return call_send_api(psid, msg)
 
 # ---------------------
-# Messages
-# ---------------------
-def send_menu(psid):
-    return call_send_api(psid, {"attachment": {"type": "image", "payload": {"url": MENU_URL, "is_reusable": True}}})
-
-def send_foodpanda(psid):
-    return call_send_api(psid, {"text": FOODPANDA_URL})
-
-def send_location(psid):
-    return call_send_api(psid, {"text": GOOGLE_MAP_URL})
-
-def send_contact_info(psid):
-    return call_send_api(psid, {"text": f"📞 Contact us at {PHONE_NUMBER}"})
-
-def prompt_advance_order(psid):
-    now = datetime.now().time()
-    if now < OPEN_TIME:
-        return call_send_api(psid, {"text": f"🌅 The store is not open yet. It opens at {OPEN_TIME.strftime('%I:%M %p')}."})
-    return call_send_api(psid, {"text": "📝 Please type your advance order now."})
-
-# ---------------------
 # Handle payloads
 # ---------------------
 def handle_payload(psid, payload):
     if not payload or payload == "GET_STARTED":
-        # Send greeting
         greeting = (
             "Hi! Thanks for messaging Pedro’s Classic and Asian Cuisine 🍗🍳🥩\n"
             "For quick orders, call us at 0917 150 5518 or (042)421 5968. 🥰"
@@ -138,38 +136,27 @@ def webhook():
         mode = request.args.get("hub.mode")
         token = request.args.get("hub.verify_token")
         challenge = request.args.get("hub.challenge")
-        logger.info(f"Webhook verification attempt: mode={mode}, token={token}")
         if mode == "subscribe" and token == VERIFY_TOKEN:
-            logger.info("✅ Verification successful")
             return Response(challenge, status=200, mimetype="text/plain")
         return Response("Forbidden", status=403)
 
     if request.method == "POST":
         data = request.get_json()
-        logger.info(f"Incoming webhook event: {json.dumps(data, indent=2)}")
-
         if data.get("object") == "page":
             for entry in data.get("entry", []):
                 for event in entry.get("messaging", []):
                     psid = event.get("sender", {}).get("id")
                     if not psid:
                         continue
-                    logger.info(f"New PSID: {psid}")
-
-                    # Message
+                    # Quick replies
                     if "message" in event:
                         msg = event["message"]
                         if msg.get("quick_reply"):
                             handle_payload(psid, msg["quick_reply"].get("payload"))
-                        elif "text" in msg:
-                            # If user is typing free text, you can implement advance order capture here
-                            pass
-
-                    # Postback (GET_STARTED)
+                    # Postback GET_STARTED
                     elif "postback" in event:
                         payload = event["postback"].get("payload")
                         handle_payload(psid, payload)
-
         return Response("EVENT_RECEIVED", status=200)
 
 # ---------------------
@@ -177,5 +164,4 @@ def webhook():
 # ---------------------
 if __name__ == "__main__":
     PORT = int(os.getenv("PORT", 10000))
-    logger.info(f"Starting Flask app on port {PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=True)
