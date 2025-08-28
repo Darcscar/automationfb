@@ -3,7 +3,7 @@ import json
 import logging
 from flask import Flask, request, Response
 import requests
-from datetime import datetime, time
+from datetime import datetime, time, date
 
 app = Flask(__name__)
 
@@ -30,8 +30,9 @@ PHONE_NUMBER = "09171505518 / (042)4215968"
 OPEN_TIME = time(10, 0)   # 10:00 AM
 CLOSE_TIME = time(22, 0)  # 10:00 PM
 
-# Track user states (advance order flow)
+# Track user states and greetings
 user_states = {}
+last_greeted = {}
 
 # ---------------------
 # Helper: Send message
@@ -88,12 +89,13 @@ def send_main_menu(psid):
 # Button/template senders
 # ---------------------
 def send_menu(psid):
-    return call_send_api(psid, {
+    call_send_api(psid, {
         "attachment": {"type": "image", "payload": {"url": MENU_URL, "is_reusable": True}}
     })
+    return send_main_menu(psid)
 
 def send_foodpanda(psid):
-    return call_send_api(psid, {
+    call_send_api(psid, {
         "attachment": {
             "type": "template",
             "payload": {
@@ -103,9 +105,10 @@ def send_foodpanda(psid):
             }
         }
     })
+    return send_main_menu(psid)
 
 def send_location(psid):
-    return call_send_api(psid, {
+    call_send_api(psid, {
         "attachment": {
             "type": "template",
             "payload": {
@@ -115,15 +118,24 @@ def send_location(psid):
             }
         }
     })
+    return send_main_menu(psid)
 
 def send_contact_info(psid):
-    return call_send_api(psid, {"text": f"☎️ Contact us: {PHONE_NUMBER}"})
+    call_send_api(psid, {"text": f"☎️ Contact us: {PHONE_NUMBER}"})
+    return send_main_menu(psid)
 
 # ---------------------
 # Handle payloads / messages
 # ---------------------
 def handle_payload(psid, payload=None, text_message=None):
-    # GET_STARTED greeting (once)
+    today = date.today()
+
+    # Greet user once per day
+    if psid not in last_greeted or last_greeted[psid] != today:
+        call_send_api(psid, {"text": hours_message()})
+        last_greeted[psid] = today
+
+    # GET_STARTED greeting
     if payload == "GET_STARTED":
         welcome_text = (
             "Hi! Thanks for messaging Pedro’s Classic and Asian Cuisine 🥰🍗🍳🥩\n\n"
@@ -132,7 +144,7 @@ def handle_payload(psid, payload=None, text_message=None):
         call_send_api(psid, {"text": welcome_text})
         return send_main_menu(psid)
 
-    # Start Advance Order flow (available 24/7)
+    # Start Advance Order flow (always available)
     if payload == "Q_ADVANCE_ORDER":
         call_send_api(psid, {"text": "📝 Please type your order now:"})
         user_states[psid] = "awaiting_order"
@@ -141,7 +153,6 @@ def handle_payload(psid, payload=None, text_message=None):
     # If waiting for advance order text
     if user_states.get(psid) == "awaiting_order" and text_message:
         try:
-            # Forward to n8n (replace with your webhook URL)
             requests.post(
                 "https://your-n8n-webhook.url/webhook/advance-order",
                 json={"psid": psid, "order": text_message},
@@ -154,12 +165,7 @@ def handle_payload(psid, payload=None, text_message=None):
         user_states.pop(psid, None)
         return send_main_menu(psid)
 
-    # Store Hours
-    if payload == "Q_HOURS":
-        call_send_api(psid, {"text": hours_message()})
-        return send_main_menu(psid)
-
-    # Always available
+    # Button actions
     if payload == "Q_VIEW_MENU":
         return send_menu(psid)
     if payload == "Q_FOODPANDA":
@@ -168,17 +174,14 @@ def handle_payload(psid, payload=None, text_message=None):
         return send_location(psid)
     if payload == "Q_CONTACT":
         return send_contact_info(psid)
-
-    # Free-text outside hours → show hours
-    if text_message and not is_store_open():
+    if payload == "Q_HOURS":
         call_send_api(psid, {"text": hours_message()})
         return send_main_menu(psid)
 
-    # Free-text during open hours → show menu
+    # Free-text → show menu (if not advance order)
     if text_message:
         return send_main_menu(psid)
 
-    # Fallback
     return send_main_menu(psid)
 
 # ---------------------
