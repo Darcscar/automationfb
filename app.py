@@ -59,12 +59,13 @@ def is_store_open():
     now = datetime.now().time()
     return OPEN_TIME <= now <= CLOSE_TIME
 
-def store_closed_message():
+def hours_message():
     now = datetime.now().time()
+    if is_store_open():
+        return "⏰ We are OPEN today from 10:00 AM to 10:00 PM."
     if now < OPEN_TIME:
-        return f"🌅 Good morning! The store will open at {OPEN_TIME.strftime('%I:%M %p')}."
-    else:
-        return f"🌙 Sorry, the store is closed now. We’ll open tomorrow at {OPEN_TIME.strftime('%I:%M %p')}."
+        return f"🌅 Good morning! We’ll open at {OPEN_TIME.strftime('%I:%M %p')}."
+    return f"🌙 We’re closed now. We’ll open tomorrow at {OPEN_TIME.strftime('%I:%M %p')}."
 
 # ---------------------
 # Quick Replies Menu
@@ -73,36 +74,36 @@ def send_main_menu(psid):
     msg = {
         "text": "👇 Please choose an option:",
         "quick_replies": [
-            {"content_type": "text", "title": "📋 Menu", "payload": "Q_VIEW_MENU"},
-            {"content_type": "text", "title": "🛵 Foodpanda", "payload": "Q_FOODPANDA"},
-            {"content_type": "text", "title": "📝 Advance Order", "payload": "Q_ADVANCE_ORDER"},
-            {"content_type": "text", "title": "📍 Location", "payload": "Q_LOCATION"},
-            {"content_type": "text", "title": "📞 Contact Us", "payload": "Q_CONTACT"},
+            {"content_type": "text", "title": "📋 Menu",           "payload": "Q_VIEW_MENU"},
+            {"content_type": "text", "title": "🛵 Foodpanda",      "payload": "Q_FOODPANDA"},
+            {"content_type": "text", "title": "📝 Advance Order",  "payload": "Q_ADVANCE_ORDER"},
+            {"content_type": "text", "title": "📍 Location",       "payload": "Q_LOCATION"},
+            {"content_type": "text", "title": "📞 Contact Us",     "payload": "Q_CONTACT"},
+            {"content_type": "text", "title": "⏰ Store Hours",     "payload": "Q_HOURS"},
         ]
     }
     return call_send_api(psid, msg)
 
 # ---------------------
-# Button templates
+# Button/template senders
 # ---------------------
 def send_menu(psid):
+    # Direct image (no extra text)
     return call_send_api(psid, {
         "attachment": {"type": "image", "payload": {"url": MENU_URL, "is_reusable": True}}
     })
 
 def send_foodpanda(psid):
-    return call_send_api(psid, {"text": f"🛵 Order now on Foodpanda:\n{FOODPANDA_URL}"})
+    return call_send_api(psid, {"text": f"{FOODPANDA_URL}"})
 
 def send_location(psid):
-    return call_send_api(psid, {"text": f"📍 Pedro’s Classic and Asian Cuisine\n{GOOGLE_MAP_URL}"})
+    return call_send_api(psid, {"text": f"{GOOGLE_MAP_URL}"})
 
 def send_contact_info(psid):
-    text = f"📞 Contact us at {PHONE_NUMBER} or reply here and a staff member will assist you."
-    call_send_api(psid, {"text": text})
-    return send_main_menu(psid)
+    return call_send_api(psid, {"text": f"{PHONE_NUMBER}"})
 
 # ---------------------
-# Handle payloads
+# Handle payloads / messages
 # ---------------------
 def handle_payload(psid, payload=None, text_message=None):
     # GET_STARTED greeting
@@ -114,30 +115,34 @@ def handle_payload(psid, payload=None, text_message=None):
         call_send_api(psid, {"text": welcome_text})
         return send_main_menu(psid)
 
-    # Advance Order start
+    # Start Advance Order flow (available 24/7)
     if payload == "Q_ADVANCE_ORDER":
-        call_send_api(psid, {"text": "📝 Sure! Please type your order below:"})
+        call_send_api(psid, {"text": "📝 Please type your order now:"})
         user_states[psid] = "awaiting_order"
         return
 
     # If waiting for advance order text
-    if psid in user_states and user_states[psid] == "awaiting_order" and text_message:
-        # Forward to n8n webhook
+    if user_states.get(psid) == "awaiting_order" and text_message:
         try:
-            requests.post("https://your-n8n-webhook.url/webhook/advance-order",
-                          json={"psid": psid, "order": text_message}, timeout=10)
+            # Forward to n8n (replace with your webhook URL)
+            requests.post(
+                "https://your-n8n-webhook.url/webhook/advance-order",
+                json={"psid": psid, "order": text_message},
+                timeout=10
+            )
         except Exception as e:
             logger.error(f"n8n forwarding error: {e}")
 
-        call_send_api(psid, {"text": "✅ Your advance order has been received. It will be prepared once the store opens."})
+        call_send_api(psid, {"text": "✅ Your advance order has been received. Thank you!"})
         user_states.pop(psid, None)
         return send_main_menu(psid)
 
-    # Normal inquiries outside store hours
-    if payload not in ["Q_ADVANCE_ORDER"] and text_message is None and not is_store_open():
-        return call_send_api(psid, {"text": store_closed_message()})
+    # Store Hours (explicit)
+    if payload == "Q_HOURS":
+        call_send_api(psid, {"text": hours_message()})
+        return send_main_menu(psid)
 
-    # Main actions
+    # Actions available 24/7 (no gating by hours)
     if payload == "Q_VIEW_MENU":
         return send_menu(psid)
     if payload == "Q_FOODPANDA":
@@ -146,6 +151,15 @@ def handle_payload(psid, payload=None, text_message=None):
         return send_location(psid)
     if payload == "Q_CONTACT":
         return send_contact_info(psid)
+
+    # Free-text outside hours → inform hours but still keep menu accessible
+    if text_message and not is_store_open():
+        call_send_api(psid, {"text": hours_message()})
+        return send_main_menu(psid)
+
+    # Free-text during open hours → just show menu
+    if text_message:
+        return send_main_menu(psid)
 
     # Fallback
     return send_main_menu(psid)
@@ -165,27 +179,27 @@ def webhook():
             return Response(challenge, status=200, mimetype="text/plain")
         return Response("Forbidden", status=403)
 
-    if request.method == "POST":
-        data = request.get_json()
-        logger.info(f"Incoming webhook event: {json.dumps(data, indent=2)}")
+    # POST
+    data = request.get_json()
+    logger.info(f"Incoming webhook event: {json.dumps(data, indent=2)}")
 
-        if data.get("object") == "page":
-            for entry in data.get("entry", []):
-                for event in entry.get("messaging", []):
-                    psid = event.get("sender", {}).get("id")
-                    if not psid:
-                        continue
+    if data.get("object") == "page":
+        for entry in data.get("entry", []):
+            for event in entry.get("messaging", []):
+                psid = event.get("sender", {}).get("id")
+                if not psid:
+                    continue
 
-                    if "message" in event:
-                        msg = event["message"]
-                        if msg.get("quick_reply"):
-                            handle_payload(psid, payload=msg["quick_reply"].get("payload"))
-                        elif "text" in msg:
-                            handle_payload(psid, text_message=msg.get("text").strip())
-                    elif "postback" in event:
-                        handle_payload(psid, payload=event["postback"].get("payload"))
+                if "message" in event:
+                    msg = event["message"]
+                    if msg.get("quick_reply"):
+                        handle_payload(psid, payload=msg["quick_reply"].get("payload"))
+                    elif "text" in msg:
+                        handle_payload(psid, text_message=msg.get("text", "").strip())
+                elif "postback" in event:
+                    handle_payload(psid, payload=event["postback"].get("payload"))
 
-        return Response("EVENT_RECEIVED", status=200)
+    return Response("EVENT_RECEIVED", status=200)
 
 # ---------------------
 # Run app
