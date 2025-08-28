@@ -26,7 +26,7 @@ FB_GRAPH = "https://graph.facebook.com/v19.0"
 FOODPANDA_URL = "https://www.foodpanda.ph/restaurant/locg/pedros-old-manila-rd"
 MENU_URL = "https://i.imgur.com/josQM5k.jpeg"
 GOOGLE_MAP_URL = "https://maps.app.goo.gl/GQUDgxLqgW6no26X8"
-PHONE_NUMBER = "0424215968"
+PHONE_NUMBER = "09171505518 / (042)4215968"
 OPEN_TIME = time(10, 0)   # 10:00 AM
 CLOSE_TIME = time(22, 0)  # 10:00 PM
 
@@ -79,7 +79,7 @@ def send_main_menu(psid):
             {"content_type": "text", "title": "📝 Advance Order",  "payload": "Q_ADVANCE_ORDER"},
             {"content_type": "text", "title": "📍 Location",       "payload": "Q_LOCATION"},
             {"content_type": "text", "title": "📞 Contact Us",     "payload": "Q_CONTACT"},
-            {"content_type": "text", "title": "⏰ Store Hours",     "payload": "Q_HOURS"},
+            {"content_type": "text", "title": "⏰ Store Hours",    "payload": "Q_HOURS"},
         ]
     }
     return call_send_api(psid, msg)
@@ -88,25 +88,42 @@ def send_main_menu(psid):
 # Button/template senders
 # ---------------------
 def send_menu(psid):
-    # Direct image (no extra text)
     return call_send_api(psid, {
         "attachment": {"type": "image", "payload": {"url": MENU_URL, "is_reusable": True}}
     })
 
 def send_foodpanda(psid):
-    return call_send_api(psid, {"text": f"{FOODPANDA_URL}"})
+    return call_send_api(psid, {
+        "attachment": {
+            "type": "template",
+            "payload": {
+                "template_type": "button",
+                "text": "🍴 Tap below to order via Foodpanda:",
+                "buttons": [{"type": "web_url", "url": FOODPANDA_URL, "title": "Order Now"}]
+            }
+        }
+    })
 
 def send_location(psid):
-    return call_send_api(psid, {"text": f"{GOOGLE_MAP_URL}"})
+    return call_send_api(psid, {
+        "attachment": {
+            "type": "template",
+            "payload": {
+                "template_type": "button",
+                "text": "📍 Tap below to view our location on Google Maps:",
+                "buttons": [{"type": "web_url", "url": GOOGLE_MAP_URL, "title": "Open Location"}]
+            }
+        }
+    })
 
 def send_contact_info(psid):
-    return call_send_api(psid, {"text": f"{PHONE_NUMBER}"})
+    return call_send_api(psid, {"text": f"☎️ Contact us: {PHONE_NUMBER}"})
 
 # ---------------------
 # Handle payloads / messages
 # ---------------------
 def handle_payload(psid, payload=None, text_message=None):
-    # GET_STARTED greeting
+    # GET_STARTED greeting (once)
     if payload == "GET_STARTED":
         welcome_text = (
             "Hi! Thanks for messaging Pedro’s Classic and Asian Cuisine 🥰🍗🍳🥩\n\n"
@@ -137,12 +154,12 @@ def handle_payload(psid, payload=None, text_message=None):
         user_states.pop(psid, None)
         return send_main_menu(psid)
 
-    # Store Hours (explicit)
+    # Store Hours
     if payload == "Q_HOURS":
         call_send_api(psid, {"text": hours_message()})
         return send_main_menu(psid)
 
-    # Actions available 24/7 (no gating by hours)
+    # Always available
     if payload == "Q_VIEW_MENU":
         return send_menu(psid)
     if payload == "Q_FOODPANDA":
@@ -152,12 +169,12 @@ def handle_payload(psid, payload=None, text_message=None):
     if payload == "Q_CONTACT":
         return send_contact_info(psid)
 
-    # Free-text outside hours → inform hours but still keep menu accessible
+    # Free-text outside hours → show hours
     if text_message and not is_store_open():
         call_send_api(psid, {"text": hours_message()})
         return send_main_menu(psid)
 
-    # Free-text during open hours → just show menu
+    # Free-text during open hours → show menu
     if text_message:
         return send_main_menu(psid)
 
