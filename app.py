@@ -75,12 +75,12 @@ def send_main_menu(psid):
     msg = {
         "text": "👇 Please choose an option:",
         "quick_replies": [
-            {"content_type": "text", "title": "📋 Menu",           "payload": "Q_VIEW_MENU"},
-            {"content_type": "text", "title": "🛵 Foodpanda",      "payload": "Q_FOODPANDA"},
-            {"content_type": "text", "title": "📝 Advance Order",  "payload": "Q_ADVANCE_ORDER"},
-            {"content_type": "text", "title": "📍 Location",       "payload": "Q_LOCATION"},
-            {"content_type": "text", "title": "📞 Contact Us",     "payload": "Q_CONTACT"},
-            {"content_type": "text", "title": "⏰ Store Hours",    "payload": "Q_HOURS"},
+            {"content_type": "text", "title": "📋 Menu", "payload": "Q_VIEW_MENU"},
+            {"content_type": "text", "title": "🛵 Foodpanda", "payload": "Q_FOODPANDA"},
+            {"content_type": "text", "title": "📝 Advance Order", "payload": "Q_ADVANCE_ORDER"},
+            {"content_type": "text", "title": "📍 Location", "payload": "Q_LOCATION"},
+            {"content_type": "text", "title": "📞 Contact Us", "payload": "Q_CONTACT"},
+            {"content_type": "text", "title": "⏰ Store Hours", "payload": "Q_HOURS"},
         ]
     }
     return call_send_api(psid, msg)
@@ -152,15 +152,17 @@ def handle_payload(psid, payload=None, text_message=None):
 
     # If waiting for advance order text
     if user_states.get(psid) == "awaiting_order" and text_message:
+        logger.info(f"🔹 Forwarding advance order from PSID {psid} to n8n...")
         try:
             n8n_webhook_url = "https://n8n-kbew.onrender.com/webhook/advance-order"
-            requests.post(
+            resp = requests.post(
                 n8n_webhook_url,
                 json={"psid": psid, "order": text_message},
-                timeout=10
+                timeout=15
             )
+            logger.info(f"📤 n8n response status: {resp.status_code}")
         except Exception as e:
-            logger.error(f"n8n forwarding error: {e}")
+            logger.error(f"❌ n8n forwarding error: {e}")
 
         call_send_api(psid, {"text": "✅ Your advance order has been received. Thank you!"})
         user_states.pop(psid, None)
@@ -194,7 +196,7 @@ def webhook():
         mode = request.args.get("hub.mode")
         token = request.args.get("hub.verify_token")
         challenge = request.args.get("hub.challenge")
-        logger.info(f"Webhook verification attempt: mode={mode}, token={token}")
+        logger.info(f"🔑 Webhook verification attempt: mode={mode}, token={token}")
         if mode == "subscribe" and token == VERIFY_TOKEN:
             logger.info("✅ Verification successful")
             return Response(challenge, status=200, mimetype="text/plain")
@@ -202,22 +204,26 @@ def webhook():
 
     # POST
     data = request.get_json()
-    logger.info(f"Incoming webhook event: {json.dumps(data, indent=2)}")
+    logger.info(f"📩 Incoming webhook event: {json.dumps(data, indent=2)}")
 
     if data.get("object") == "page":
         for entry in data.get("entry", []):
             for event in entry.get("messaging", []):
                 psid = event.get("sender", {}).get("id")
                 if not psid:
+                    logger.warning("⚠️ No PSID found in event")
                     continue
 
                 if "message" in event:
                     msg = event["message"]
                     if msg.get("quick_reply"):
+                        logger.info(f"🔹 Quick reply received from PSID {psid}: {msg['quick_reply'].get('payload')}")
                         handle_payload(psid, payload=msg["quick_reply"].get("payload"))
                     elif "text" in msg:
+                        logger.info(f"🔹 Text message received from PSID {psid}: {msg['text']}")
                         handle_payload(psid, text_message=msg.get("text", "").strip())
                 elif "postback" in event:
+                    logger.info(f"🔹 Postback received from PSID {psid}: {event['postback'].get('payload')}")
                     handle_payload(psid, payload=event["postback"].get("payload"))
 
     return Response("EVENT_RECEIVED", status=200)
@@ -227,5 +233,8 @@ def webhook():
 # ---------------------
 if __name__ == "__main__":
     PORT = int(os.getenv("PORT", 10000))
-    logger.info(f"Starting Flask app on port {PORT}")
-    app.run(host="0.0.0.0", port=PORT, debug=True)
+    logger.info(f"🚀 Starting Flask app on port {PORT}...")
+    try:
+        app.run(host="0.0.0.0", port=PORT, debug=True)
+    except Exception as e:
+        logger.error(f"❌ Flask app failed to start: {e}")
