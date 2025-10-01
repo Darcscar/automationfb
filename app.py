@@ -25,7 +25,7 @@ FB_GRAPH = "https://graph.facebook.com/v19.0"
 # Store configuration
 # ---------------------
 FOODPANDA_URL = "https://www.foodpanda.ph/restaurant/locg/pedros-old-manila-rd"
-MENU_URL = "https://i.imgur.com/rhRgAfb.jpeg"
+MENU_URL = "https://i.imgur.com/c2ir2Qy.jpeg"
 GOOGLE_MAP_URL = "https://maps.app.goo.gl/GQUDgxLqgW6no26X8"
 PHONE_NUMBER = "09171505518 / (042)4215968"
 
