@@ -17,7 +17,7 @@ logger = logging.getLogger("FBBot")
 # ---------------------
 # Tokens
 # ---------------------
-PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "<EAHJTYAULctYBPozkAuQsRvMfnqGRaz1kprNm3wxmF9gZA4hx9LtWaSZClpnk9fiDGQ4uSe0Fwv7GCGyJN8G4yVvs7UZAASRL4mhBOy6nqwhe2OZA9ovZC7ACU3JdOF4hag9JTmhLVKuK7nVcZAcj6QZAwpnG437jtXLeL6K6xREI04ZB8L2f06rrbaCSiKXmalbTUCuEZCN4ArgZDZD>")
+PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "<YOUR_PAGE_ACCESS_TOKEN>")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "123darcscar")
 FB_GRAPH = "https://graph.facebook.com/v19.0"
 
@@ -36,9 +36,8 @@ CLOSE_TIME = time(22, 0)
 # ---------------------
 # Track user states and menu
 # ---------------------
-user_states = {}       # Tracks states like "awaiting_order"
-menu_shown = {}        # Tracks if the main menu has already been sent
-last_greeted = {}      # Tracks daily greetings
+user_states = {}
+last_greeted = {}
 
 # ---------------------
 # Helper: Send message
@@ -95,11 +94,15 @@ MAIN_MENU = [
     {"content_type": "text", "title": "⏰ Store Hours", "payload": "Q_HOURS"},
 ]
 
-def send_main_menu(psid, message_text=None):
-    msg = {}
-    if message_text:
-        msg["text"] = message_text
-    msg["quick_replies"] = MAIN_MENU
+def send_main_menu(psid, message_text=" "):
+    """
+    Always include a text (even a space) to satisfy Messenger API.
+    Quick replies will appear without annoying repeated text.
+    """
+    msg = {
+        "text": message_text,
+        "quick_replies": MAIN_MENU
+    }
     return call_send_api(psid, msg)
 
 # ---------------------
@@ -109,7 +112,6 @@ def send_menu(psid):
     call_send_api(psid, {
         "attachment": {"type": "image", "payload": {"url": MENU_URL, "is_reusable": True}}
     })
-    menu_shown[psid] = True
     return send_main_menu(psid)
 
 def send_foodpanda(psid):
@@ -123,7 +125,6 @@ def send_foodpanda(psid):
             }
         }
     })
-    menu_shown[psid] = True
     return send_main_menu(psid)
 
 def send_location(psid):
@@ -137,12 +138,10 @@ def send_location(psid):
             }
         }
     })
-    menu_shown[psid] = True
     return send_main_menu(psid)
 
 def send_contact_info(psid):
     call_send_api(psid, {"text": f"☎️ Contact us: {PHONE_NUMBER}"})
-    menu_shown[psid] = True
     return send_main_menu(psid)
 
 # ---------------------
@@ -157,13 +156,13 @@ def handle_payload(psid, payload=None, text_message=None):
             "For quick orders, call us at 0917 150 5518 or (042)421 5968."
         )
         call_send_api(psid, {"text": welcome_text})
-        send_main_menu(psid)  # menu only, no repeated text
+        send_main_menu(psid)
         return
 
     if payload == "Q_ADVANCE_ORDER":
         if not is_store_open():
             call_send_api(psid, {"text": f"🌙 Sorry, we’re closed now. We’ll open tomorrow at {OPEN_TIME.strftime('%I:%M %p')}."})
-            send_main_menu(psid)  # menu only
+            send_main_menu(psid)
             return
 
         call_send_api(psid, {"text": "📝 Please type your order now:"})
@@ -187,35 +186,30 @@ def handle_payload(psid, payload=None, text_message=None):
             call_send_api(psid, {"text": "❌ Sorry, we couldn't process your order. Please try again later."})
 
         user_states.pop(psid, None)
-        menu_shown[psid] = True
-        send_main_menu(psid)  # menu only
+        send_main_menu(psid)
         return
 
     # Quick reply actions
     if payload == "Q_VIEW_MENU":
-        menu_shown[psid] = True
         send_menu(psid)
         return
     if payload == "Q_FOODPANDA":
-        menu_shown[psid] = True
         send_foodpanda(psid)
         return
     if payload == "Q_LOCATION":
-        menu_shown[psid] = True
         send_location(psid)
         return
     if payload == "Q_CONTACT":
-        menu_shown[psid] = True
         send_contact_info(psid)
         return
     if payload == "Q_HOURS":
         call_send_api(psid, {"text": hours_message()})
-        send_main_menu(psid)  # menu only
+        send_main_menu(psid)
         return
 
     # Fallback for text messages: show menu only
     if text_message:
-        send_main_menu(psid)  # no extra text, only quick replies
+        send_main_menu(psid)
         return
 
 # ---------------------
