@@ -95,11 +95,11 @@ MAIN_MENU = [
     {"content_type": "text", "title": "⏰ Store Hours", "payload": "Q_HOURS"},
 ]
 
-def send_main_menu(psid, message_text="👇 Please choose an option:"):
-    msg = {
-        "text": message_text,
-        "quick_replies": MAIN_MENU
-    }
+def send_main_menu(psid, message_text=None):
+    msg = {}
+    if message_text:
+        msg["text"] = message_text
+    msg["quick_replies"] = MAIN_MENU
     return call_send_api(psid, msg)
 
 # ---------------------
@@ -110,7 +110,7 @@ def send_menu(psid):
         "attachment": {"type": "image", "payload": {"url": MENU_URL, "is_reusable": True}}
     })
     menu_shown[psid] = True
-    return send_main_menu(psid, message_text="Here's our menu, select an option:")
+    return send_main_menu(psid)
 
 def send_foodpanda(psid):
     call_send_api(psid, {
@@ -124,7 +124,7 @@ def send_foodpanda(psid):
         }
     })
     menu_shown[psid] = True
-    return send_main_menu(psid, message_text="Back to menu:")
+    return send_main_menu(psid)
 
 def send_location(psid):
     call_send_api(psid, {
@@ -138,12 +138,12 @@ def send_location(psid):
         }
     })
     menu_shown[psid] = True
-    return send_main_menu(psid, message_text="Back to menu:")
+    return send_main_menu(psid)
 
 def send_contact_info(psid):
     call_send_api(psid, {"text": f"☎️ Contact us: {PHONE_NUMBER}"})
     menu_shown[psid] = True
-    return send_main_menu(psid, message_text="Back to menu:")
+    return send_main_menu(psid)
 
 # ---------------------
 # Handle payloads / messages
@@ -151,25 +151,19 @@ def send_contact_info(psid):
 def handle_payload(psid, payload=None, text_message=None):
     send_daily_greeting(psid)
 
-    # Helper to send menu only if not shown
-    def maybe_show_menu(msg_text="👇 Please choose an option:"):
-        if not menu_shown.get(psid, False):
-            send_main_menu(psid, msg_text)
-            menu_shown[psid] = True
-
     if payload == "GET_STARTED":
         welcome_text = (
             "Hi! Thanks for messaging Pedro’s Classic and Asian Cuisine 🥰🍗🍳🥩\n\n"
             "For quick orders, call us at 0917 150 5518 or (042)421 5968."
         )
         call_send_api(psid, {"text": welcome_text})
-        maybe_show_menu()
+        send_main_menu(psid)  # menu only, no repeated text
         return
 
     if payload == "Q_ADVANCE_ORDER":
         if not is_store_open():
             call_send_api(psid, {"text": f"🌙 Sorry, we’re closed now. We’ll open tomorrow at {OPEN_TIME.strftime('%I:%M %p')}."})
-            maybe_show_menu("Back to menu:")
+            send_main_menu(psid)  # menu only
             return
 
         call_send_api(psid, {"text": "📝 Please type your order now:"})
@@ -193,35 +187,35 @@ def handle_payload(psid, payload=None, text_message=None):
             call_send_api(psid, {"text": "❌ Sorry, we couldn't process your order. Please try again later."})
 
         user_states.pop(psid, None)
-        menu_shown[psid] = False  # allow menu to appear again
-        maybe_show_menu("Back to menu:")
+        menu_shown[psid] = True
+        send_main_menu(psid)  # menu only
         return
 
     # Quick reply actions
     if payload == "Q_VIEW_MENU":
-        menu_shown[psid] = False
+        menu_shown[psid] = True
         send_menu(psid)
         return
     if payload == "Q_FOODPANDA":
-        menu_shown[psid] = False
+        menu_shown[psid] = True
         send_foodpanda(psid)
         return
     if payload == "Q_LOCATION":
-        menu_shown[psid] = False
+        menu_shown[psid] = True
         send_location(psid)
         return
     if payload == "Q_CONTACT":
-        menu_shown[psid] = False
+        menu_shown[psid] = True
         send_contact_info(psid)
         return
     if payload == "Q_HOURS":
         call_send_api(psid, {"text": hours_message()})
-        maybe_show_menu("Back to menu:")
+        send_main_menu(psid)  # menu only
         return
 
-    # Fallback: for any text that isn’t an order or quick reply
+    # Fallback for text messages: show menu only
     if text_message:
-        maybe_show_menu("Select an option from the menu below:")
+        send_main_menu(psid)  # no extra text, only quick replies
         return
 
 # ---------------------
