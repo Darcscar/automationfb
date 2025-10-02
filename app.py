@@ -36,9 +36,9 @@ CLOSE_TIME = time(22, 0)
 # ---------------------
 # Track user states and greetings
 # ---------------------
-user_states = {}     # tracks states like 'awaiting_order'
-last_greeted = {}    # tracks if user got daily greeting
-last_menu_sent = {}  # tracks if main menu was already sent in session
+user_states = {}        # e.g., 'awaiting_order'
+last_greeted = {}       # per day greeting
+last_menu_sent = {}     # prevent menu spam in session
 
 # ---------------------
 # Helper: Send message
@@ -63,7 +63,6 @@ def get_manila_time():
 
 def is_store_open():
     now = get_manila_time().time()
-    logger.info(f"⏱ Current Manila time: {now}")
     return OPEN_TIME <= now <= CLOSE_TIME
 
 def hours_message():
@@ -75,7 +74,7 @@ def hours_message():
     return f"🌙 We’re closed now. We’ll open tomorrow at {OPEN_TIME.strftime('%I:%M %p')}."
 
 # ---------------------
-# Greetings
+# Daily greeting
 # ---------------------
 def send_daily_greeting(psid):
     today = get_manila_time().date()
@@ -84,11 +83,11 @@ def send_daily_greeting(psid):
         last_greeted[psid] = today
 
 # ---------------------
-# Main menu
+# Main menu (tap-to-send style)
 # ---------------------
 def send_main_menu(psid):
     msg = {
-        "text": "👇 Please choose an option:",
+        "text": "Tap an option below 👇",
         "quick_replies": [
             {"content_type": "text", "title": "📋 Menu", "payload": "Q_VIEW_MENU"},
             {"content_type": "text", "title": "🛵 Foodpanda", "payload": "Q_FOODPANDA"},
@@ -102,45 +101,37 @@ def send_main_menu(psid):
     last_menu_sent[psid] = True
 
 # ---------------------
-# Send content
+# Send content functions (no auto-menu)
 # ---------------------
 def send_menu(psid):
     call_send_api(psid, {"attachment": {"type": "image", "payload": {"url": MENU_URL, "is_reusable": True}}})
-    send_main_menu(psid)
 
 def send_foodpanda(psid):
-    call_send_api(psid, {
-        "attachment": {"type": "template", "payload": {
-            "template_type": "button",
-            "text": "🍴 Tap below to order via Foodpanda:",
-            "buttons": [{"type": "web_url", "url": FOODPANDA_URL, "title": "Order Now"}]
-        }}
-    })
-    send_main_menu(psid)
+    call_send_api(psid, {"attachment": {"type": "template", "payload": {
+        "template_type": "button",
+        "text": "🍴 Tap below to order via Foodpanda:",
+        "buttons": [{"type": "web_url", "url": FOODPANDA_URL, "title": "Order Now"}]
+    }}})
 
 def send_location(psid):
-    call_send_api(psid, {
-        "attachment": {"type": "template", "payload": {
-            "template_type": "button",
-            "text": "📍 Tap below to view our location on Google Maps:",
-            "buttons": [{"type": "web_url", "url": GOOGLE_MAP_URL, "title": "Open Location"}]
-        }}
-    })
-    send_main_menu(psid)
+    call_send_api(psid, {"attachment": {"type": "template", "payload": {
+        "template_type": "button",
+        "text": "📍 Tap below to view our location on Google Maps:",
+        "buttons": [{"type": "web_url", "url": GOOGLE_MAP_URL, "title": "Open Location"}]
+    }}})
 
 def send_contact_info(psid):
     call_send_api(psid, {"text": f"☎️ Contact us: {PHONE_NUMBER}"})
-    send_main_menu(psid)
 
 # ---------------------
 # Handle user messages / payloads
 # ---------------------
 def handle_payload(psid, payload=None, text_message=None):
-    # Send greeting once per day
+    # Send daily greeting once
     send_daily_greeting(psid)
 
     # ---------------------
-    # Postback / Get Started
+    # Postback / GET_STARTED
     # ---------------------
     if payload == "GET_STARTED":
         call_send_api(psid, {"text": "Hi! Thanks for messaging Pedro’s Classic and Asian Cuisine 🥰🍗🍳🥩\n\nFor quick orders, call us at 0917 150 5518 or (042)421 5968."})
@@ -150,13 +141,17 @@ def handle_payload(psid, payload=None, text_message=None):
     # Quick reply actions
     # ---------------------
     if payload == "Q_VIEW_MENU":
-        return send_menu(psid)
+        send_menu(psid)
+        return
     if payload == "Q_FOODPANDA":
-        return send_foodpanda(psid)
+        send_foodpanda(psid)
+        return
     if payload == "Q_LOCATION":
-        return send_location(psid)
+        send_location(psid)
+        return
     if payload == "Q_CONTACT":
-        return send_contact_info(psid)
+        send_contact_info(psid)
+        return
     if payload == "Q_HOURS":
         call_send_api(psid, {"text": hours_message()})
         return
@@ -174,7 +169,7 @@ def handle_payload(psid, payload=None, text_message=None):
     if user_states.get(psid) == "awaiting_order" and text_message:
         try:
             n8n_webhook_url = "https://n8n-kbew.onrender.com/webhook/advance-order"
-            resp = requests.post(json={"psid": psid, "order": text_message}, url=n8n_webhook_url, timeout=15)
+            resp = requests.post(n8n_webhook_url, json={"psid": psid, "order": text_message}, timeout=15)
             if resp.status_code == 200:
                 call_send_api(psid, {"text": "✅ Your advance order has been received. Thank you!"})
             else:
@@ -189,8 +184,44 @@ def handle_payload(psid, payload=None, text_message=None):
     # Unknown text fallback
     # ---------------------
     if text_message:
-        call_send_api(psid, {"text": "I didn't understand that. You can choose an option from the menu or type your order."})
-        # Optionally, send menu only if not already sent this session
-        if not last_menu_sent.get(psid):
-            send_main_menu(psid)
+        call_send_api(psid, {"text": "I didn't understand that. You can tap an option from the menu or type your order."})
         return
+
+# ---------------------
+# Webhook endpoint
+# ---------------------
+@app.route("/webhook", methods=["GET", "POST"])
+def webhook():
+    if request.method == "GET":
+        mode = request.args.get("hub.mode")
+        token = request.args.get("hub.verify_token")
+        challenge = request.args.get("hub.challenge")
+        if mode == "subscribe" and token == VERIFY_TOKEN:
+            return Response(challenge, status=200, mimetype="text/plain")
+        return Response("Forbidden", status=403)
+
+    data = request.get_json()
+    if data.get("object") == "page":
+        for entry in data.get("entry", []):
+            for event in entry.get("messaging", []):
+                psid = event.get("sender", {}).get("id")
+                if not psid:
+                    continue
+
+                if "message" in event:
+                    msg = event["message"]
+                    if msg.get("quick_reply"):
+                        handle_payload(psid, payload=msg["quick_reply"].get("payload"))
+                    elif "text" in msg:
+                        handle_payload(psid, text_message=msg.get("text", "").strip())
+                elif "postback" in event:
+                    handle_payload(psid, payload=event["postback"].get("payload"))
+
+    return Response("EVENT_RECEIVED", status=200)
+
+# ---------------------
+# Run app
+# ---------------------
+if __name__ == "__main__":
+    PORT = int(os.getenv("PORT", 10000))
+    app.run(host="0.0.0.0", port=PORT, debug=True)
