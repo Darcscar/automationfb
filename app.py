@@ -83,11 +83,11 @@ def send_daily_greeting(psid):
         last_greeted[psid] = today
 
 # ---------------------
-# Main menu (tap-to-send style)
+# Main menu (Please choose an option)
 # ---------------------
 def send_main_menu(psid):
     msg = {
-        "text": "Tap an option below 👇",
+        "text": "Please choose an option:",  # ✅ updated prompt
         "quick_replies": [
             {"content_type": "text", "title": "📋 Menu", "payload": "Q_VIEW_MENU"},
             {"content_type": "text", "title": "🛵 Foodpanda", "payload": "Q_FOODPANDA"},
@@ -127,7 +127,6 @@ def send_contact_info(psid):
 # Handle user messages / payloads
 # ---------------------
 def handle_payload(psid, payload=None, text_message=None):
-    # Send daily greeting once
     send_daily_greeting(psid)
 
     # ---------------------
@@ -184,7 +183,11 @@ def handle_payload(psid, payload=None, text_message=None):
     # Unknown text fallback
     # ---------------------
     if text_message:
-        call_send_api(psid, {"text": "I didn't understand that. You can tap an option from the menu or type your order."})
+        if user_states.get(psid) != "awaiting_order":
+            if text_message.lower() in ["hi", "hello", "hey"]:
+                call_send_api(psid, {"text": "Hi there! 👋"})
+            else:
+                call_send_api(psid, {"text": "I didn't understand that. You can tap an option from the menu or type your order."})
         return
 
 # ---------------------
