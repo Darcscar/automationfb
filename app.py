@@ -34,10 +34,11 @@ OPEN_TIME = time(10, 0)
 CLOSE_TIME = time(22, 0)
 
 # ---------------------
-# Track user states and greetings
+# Track user states and menu
 # ---------------------
-user_states = {}
-last_greeted = {}
+user_states = {}       # Tracks states like "awaiting_order"
+menu_shown = {}        # Tracks if the main menu has already been sent
+last_greeted = {}      # Tracks daily greetings
 
 # ---------------------
 # Helper: Send message
@@ -83,7 +84,7 @@ def send_daily_greeting(psid):
         last_greeted[psid] = today
 
 # ---------------------
-# Quick replies menu (integrated in menu bar)
+# Quick replies menu
 # ---------------------
 MAIN_MENU = [
     {"content_type": "text", "title": "📋 Menu", "payload": "Q_VIEW_MENU"},
@@ -108,7 +109,7 @@ def send_menu(psid):
     call_send_api(psid, {
         "attachment": {"type": "image", "payload": {"url": MENU_URL, "is_reusable": True}}
     })
-    # Menu bar already shows quick replies, no spam
+    menu_shown[psid] = True
     return send_main_menu(psid, message_text="Here's our menu, select an option:")
 
 def send_foodpanda(psid):
@@ -122,6 +123,7 @@ def send_foodpanda(psid):
             }
         }
     })
+    menu_shown[psid] = True
     return send_main_menu(psid, message_text="Back to menu:")
 
 def send_location(psid):
@@ -135,10 +137,12 @@ def send_location(psid):
             }
         }
     })
+    menu_shown[psid] = True
     return send_main_menu(psid, message_text="Back to menu:")
 
 def send_contact_info(psid):
     call_send_api(psid, {"text": f"☎️ Contact us: {PHONE_NUMBER}"})
+    menu_shown[psid] = True
     return send_main_menu(psid, message_text="Back to menu:")
 
 # ---------------------
@@ -147,18 +151,26 @@ def send_contact_info(psid):
 def handle_payload(psid, payload=None, text_message=None):
     send_daily_greeting(psid)
 
+    # Helper to send menu only if not shown
+    def maybe_show_menu(msg_text="👇 Please choose an option:"):
+        if not menu_shown.get(psid, False):
+            send_main_menu(psid, msg_text)
+            menu_shown[psid] = True
+
     if payload == "GET_STARTED":
         welcome_text = (
             "Hi! Thanks for messaging Pedro’s Classic and Asian Cuisine 🥰🍗🍳🥩\n\n"
             "For quick orders, call us at 0917 150 5518 or (042)421 5968."
         )
         call_send_api(psid, {"text": welcome_text})
-        return send_main_menu(psid)
+        maybe_show_menu()
+        return
 
     if payload == "Q_ADVANCE_ORDER":
         if not is_store_open():
             call_send_api(psid, {"text": f"🌙 Sorry, we’re closed now. We’ll open tomorrow at {OPEN_TIME.strftime('%I:%M %p')}."})
-            return send_main_menu(psid, message_text="Back to menu:")
+            maybe_show_menu("Back to menu:")
+            return
 
         call_send_api(psid, {"text": "📝 Please type your order now:"})
         user_states[psid] = "awaiting_order"
@@ -176,32 +188,41 @@ def handle_payload(psid, payload=None, text_message=None):
                 call_send_api(psid, {"text": "✅ Your advance order has been received. Thank you!"})
             else:
                 call_send_api(psid, {"text": "❌ Sorry, we couldn't process your order. Please try again later."})
-            logger.info(f"📤 n8n response: {resp.status_code} {resp.text}")
         except requests.exceptions.RequestException as e:
             logger.error(f"❌ n8n forwarding error: {e}")
             call_send_api(psid, {"text": "❌ Sorry, we couldn't process your order. Please try again later."})
 
         user_states.pop(psid, None)
-        return send_main_menu(psid, message_text="Back to menu:")
+        menu_shown[psid] = False  # allow menu to appear again
+        maybe_show_menu("Back to menu:")
+        return
 
     # Quick reply actions
     if payload == "Q_VIEW_MENU":
-        return send_menu(psid)
+        menu_shown[psid] = False
+        send_menu(psid)
+        return
     if payload == "Q_FOODPANDA":
-        return send_foodpanda(psid)
+        menu_shown[psid] = False
+        send_foodpanda(psid)
+        return
     if payload == "Q_LOCATION":
-        return send_location(psid)
+        menu_shown[psid] = False
+        send_location(psid)
+        return
     if payload == "Q_CONTACT":
-        return send_contact_info(psid)
+        menu_shown[psid] = False
+        send_contact_info(psid)
+        return
     if payload == "Q_HOURS":
         call_send_api(psid, {"text": hours_message()})
-        return send_main_menu(psid, message_text="Back to menu:")
+        maybe_show_menu("Back to menu:")
+        return
 
-    # Default fallback: only send menu once, no spam
+    # Fallback: for any text that isn’t an order or quick reply
     if text_message:
-        return send_main_menu(psid, message_text="Select an option from the menu below:")
-
-    return send_main_menu(psid, message_text="Select an option from the menu below:")
+        maybe_show_menu("Select an option from the menu below:")
+        return
 
 # ---------------------
 # Webhook
@@ -240,4 +261,5 @@ def webhook():
 # ---------------------
 if __name__ == "__main__":
     PORT = int(os.getenv("PORT", 10000))
+    logger.info(f"🚀 Starting Flask app on port {PORT}...")
     app.run(host="0.0.0.0", port=PORT, debug=True)
