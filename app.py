@@ -72,7 +72,7 @@ def is_store_open():
 def hours_message():
     now = get_manila_time().time()
     if is_store_open():
-        return "⏰ We are OPEN today from 10:00 AM to 09:00 PM."
+        return "⏰ We are OPEN today from 10:00 AM to 9:00 PM."
     if now < OPEN_TIME:
         return f"🌅 Good morning! We’ll open at {OPEN_TIME.strftime('%I:%M %p')}."
     return f"🌙 We’re closed now. We’ll open tomorrow at {OPEN_TIME.strftime('%I:%M %p')}."
