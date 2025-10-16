@@ -3,7 +3,7 @@ import json
 import logging
 from flask import Flask, request, Response
 import requests
-from datetime import datetime, time, date
+from datetime import datetime, time, date, timedelta
 from zoneinfo import ZoneInfo
 
 app = Flask(__name__)
@@ -79,7 +79,7 @@ def get_config_value(key_path, default=None):
 user_states = {}
 last_greeted = {}
 menu_shown_time = {}  # Track when menu was last shown to prevent spam
-human_takeover = {}  # Track conversations where human agents have taken over
+user_menu_muted_until = {}  # PSID -> datetime until when menu is muted
 
 # ---------------------
 # Helper: Send message
@@ -160,6 +160,15 @@ def send_daily_greeting(psid):
 # ---------------------
 def should_show_menu(psid):
     """Determine if we should show the menu to avoid spam"""
+    # Global suppression via config
+    if get_config_value('menu_suppression.suppress_menu_globally', False):
+        return False
+
+    # Per-user mute window
+    muted_until = user_menu_muted_until.get(psid)
+    if muted_until and datetime.now() < muted_until:
+        return False
+
     now = datetime.now()
     last_shown = menu_shown_time.get(psid)
     
@@ -235,23 +244,6 @@ def send_contact_info(psid):
 # Handle payloads / messages
 # ---------------------
 def handle_payload(psid, payload=None, text_message=None):
-    # Check if human agent has taken over this conversation
-    if human_takeover.get(psid, False):
-        # Special command to resume bot (only for staff)
-        if text_message and text_message.lower() in ["/resume", "/bot"]:
-            human_takeover[psid] = False
-            logger.info(f"🤖 Bot resumed for PSID {psid}")
-            return send_message_with_quick_replies(psid, "Bot is now active again. How can I help you?")
-        # Otherwise, bot stays silent when human is handling
-        logger.info(f"👤 Human agent is handling PSID {psid}, bot staying silent")
-        return
-    
-    # Special command to pause bot (for staff to take over)
-    if text_message and text_message.lower() in ["/pause", "/human", "/takeover"]:
-        human_takeover[psid] = True
-        logger.info(f"👤 Human takeover activated for PSID {psid}")
-        return  # Bot goes silent
-    
     send_daily_greeting(psid)
 
     if payload == "GET_STARTED":
@@ -308,7 +300,16 @@ def handle_payload(psid, payload=None, text_message=None):
 
     # Default fallback for unrecognized text
     if text_message:
-        # Only show quick replies if it hasn't been shown recently (2 min cooldown)
+        # Auto-mute if message mentions an agent name
+        lower_text = text_message.lower()
+        agent_names = get_config_value('menu_suppression.agent_names', []) or []
+        if any(name in lower_text for name in agent_names):
+            # Mute menu for this user for 24 hours
+            user_menu_muted_until[psid] = datetime.now().replace(microsecond=0) + timedelta(hours=24)
+            logger.info(f"🔇 Menu muted for PSID {psid} due to agent mention")
+            return  # Do not show anything
+
+        # Only show quick replies if it hasn't been shown recently (2 min cooldown) and not muted
         if should_show_menu(psid):
             return send_message_with_quick_replies(psid, "I can help you with the following options:")
         # Otherwise, don't respond to avoid spam
@@ -342,17 +343,6 @@ def webhook():
 
                 if "message" in event:
                     msg = event["message"]
-                    
-                    # Detect if message is from page (human agent reply)
-                    if msg.get("is_echo"):
-                        # This is a message sent by the page (human agent)
-                        # Automatically pause bot for this conversation
-                        recipient_id = event.get("recipient", {}).get("id")
-                        if recipient_id:
-                            human_takeover[recipient_id] = True
-                            logger.info(f"👤 Human agent replied to PSID {recipient_id}, bot paused automatically")
-                        continue  # Skip processing this message
-                    
                     if msg.get("quick_reply"):
                         handle_payload(psid, payload=msg["quick_reply"].get("payload"))
                     elif "text" in msg:

@@ -15,6 +15,10 @@
   "special_closures": {
     "note": "Add dates here when store will be closed (format: YYYY-MM-DD)",
     "closed_dates": []
+  },
+  "menu_suppression": {
+    "suppress_menu_globally": false,
+    "agent_names": ["pedro", "danez", "ariane", "ariane marie"]
   }
 }
 
