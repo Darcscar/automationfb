@@ -18,13 +18,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("FBBot")
 
 # Tokens
-PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "EAHJTYAULctYBPozkAuQsRvMfnqGRaz1kprNm3wxmF9gZA4hx9LtWaSZClpnk9fiDGQ4uSe0Fwv7GCGyJN8G4yVvs7UZAASRL4mhBOy6nqwhe2OZA9ovZC7ACU3JdOF4hag9JTmhLVKuK7nVcZAcj6QZAwpnG437jtXLeL6K6xREI04ZB8L2f06rrbaCSiKXmalbTUCuEZCN4ArgZDZD")
+PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "<YOUR_PAGE_ACCESS_TOKEN>")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "123darcscar")
 FB_GRAPH = "https://graph.facebook.com/v19.0"
 
 # Supabase Configuration
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://tgawpkpcfrxobgrsysic.supabase.co")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnYXdwa3BjZnJ4b2JncnN5c2ljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM1ODI5NjQsImV4cCI6MjA2OTE1ODk2NH0.AsNuusVkPzozfCB6QTyLy5cnQUgwmXsjNhNH3hb75Ew")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "your-anon-key-here")
 
 # Configuration
 CONFIG_FILE = "config.json"
@@ -79,7 +79,8 @@ user_menu_muted_until = {}
 def save_order_to_supabase(psid, order_text):
     try:
         now = datetime.now(ZoneInfo('Asia/Manila'))
-        order_number = f"FB-{now.strftime('%Y%m%d')}-{psid[-6:]}"
+        # Include time to make order number unique (even if same customer orders multiple times per day)
+        order_number = f"FB-{now.strftime('%Y%m%d%H%M%S')}-{psid[-6:]}"
         
         url = f"{SUPABASE_URL}/rest/v1/online_orders"
         headers = {
@@ -198,6 +199,8 @@ def send_message_with_quick_replies(psid, text):
 def send_menu(psid):
     menu_url = get_config_value('urls.menu', 'https://i.imgur.com/c2ir2Qy.jpeg')
     call_send_api(psid, {"attachment": {"type": "image", "payload": {"url": menu_url, "is_reusable": True}}})
+    # Send confirmation without quick replies to close buttons
+    call_send_api(psid, {"text": "Here's our menu! 📋"})
 
 def send_foodpanda(psid):
     foodpanda_url = get_config_value('urls.foodpanda', 'https://www.foodpanda.ph/restaurant/locg/pedros-old-manila-rd')
