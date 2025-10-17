@@ -1,62 +1,45 @@
-"""
-CLEAN PYTHON CODE FOR FACEBOOK BOT - SUPABASE INTEGRATION
-No special characters, ready to copy-paste!
-"""
-
-import os
-import json
-import logging
-from flask import Flask, request, Response
-import requests
-from datetime import datetime, time, date, timedelta
-from zoneinfo import ZoneInfo
-
-app = Flask(__name__)
-
 # ---------------------
-# Logging
+# Notification: Order Ready
 # ---------------------
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("FBBot")
-
-# ---------------------
-# Tokens
-# ---------------------
-PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "EAHJTYAULctYBPozkAuQsRvMfnqGRaz1kprNm3wxmF9gZA4hx9LtWaSZClpnk9fiDGQ4uSe0Fwv7GCGyJN8G4yVvs7UZAASRL4mhBOy6nqwhe2OZA9ovZC7ACU3JdOF4hag9JTmhLVKuK7nVcZAcj6QZAwpnG437jtXLeL6K6xREI04ZB8L2f06rrbaCSiKXmalbTUCuEZCN4ArgZDZD")
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "123darcscar")
-FB_GRAPH = "https://graph.facebook.com/v19.0"
-
-# ---------------------
-# SUPABASE Configuration
-# ---------------------
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://tgawpkpcfrxobgrsysic.supabase.co")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnYXdwa3BjZnJ4b2JncnN5c2ljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM1ODI5NjQsImV4cCI6MjA2OTE1ODk2NH0.AsNuusVkPzozfCB6QTyLy5cnQUgwmXsjNhNH3hb75Ew")
-
-# ---------------------
-# Configuration management
-# ---------------------
-CONFIG_FILE = "config.json"
-config = {}
-config_last_modified = None
-
-def load_config():
-    """Load configuration from config.json and cache it"""
-    global config, config_last_modified
+@app.route("/webhook/order-ready", methods=["POST"])
+def notify_order_ready():
+    """Send notification to customer when order is ready for pickup"""
     try:
-        if os.path.exists(CONFIG_FILE):
-            current_modified = os.path.getmtime(CONFIG_FILE)
-            if config_last_modified != current_modified:
-                with open(CONFIG_FILE, 'r') as f:
-                    config = json.load(f)
-                config_last_modified = current_modified
-                logger.info(f"Configuration loaded/reloaded from {CONFIG_FILE}")
+        data = request.get_json()
+        psid = data.get("psid")
+        order_number = data.get("order_number")
+        customer_name = data.get("customer_name", "Customer")
+        
+        if not psid or not order_number:
+            logger.error("Missing PSID or order_number in notification request")
+            return Response(json.dumps({"error": "Missing required fields"}), status=400, mimetype="application/json")
+        
+        logger.info(f"Sending order ready notification to PSID {psid} for order {order_number}")
+        
+        # Send notification message to customer
+        message_text = (
+            f"Good news! Your order #{order_number} is ready for pickup!\n\n"
+            f"Please come to {get_config_value('contact.restaurant_name', 'Pedro\\'s Restaurant')} to pick up your order.\n\n"
+            f"See you soon! Thank you for ordering with us!"
+        )
+        
+        result = call_send_api(psid, {"text": message_text})
+        
+        if result:
+            logger.info(f"Order ready notification sent successfully to {customer_name}")
+            return Response(json.dumps({"success": True, "message": "Customer notified"}), status=200, mimetype="application/json")
         else:
-            # Fallback default config
-            config = {
-                "store_hours": {"open_time": "10:00", "close_time": "22:00", "timezone": "Asia/Manila"},
-                "contact": {"phone_number": "09171505518 / (042)4215968"},
-                "urls": {
-                    "foodpanda": "https://www.foodpanda.ph/restaurant/locg/pedros-old-manila-rd",
+            logger.error("Failed to send notification via Facebook API")
+            return Response(json.dumps({"error": "Failed to send message"}), status=500, mimetype="application/json")
+            
+    except Exception as e:
+        logger.error(f"Error in order ready notification: {e}")
+        return Response(json.dumps({"error": str(e)}), status=500, mimetype="application/json")
+
+# ---------------------
+# Webhook
+# ---------------------
+@app.route("/webhook", methods=["GET", "POST"])
                     "menu": "https://i.imgur.com/c2ir2Qy.jpeg",
                     "google_map": "https://maps.app.goo.gl/GQUDgxLqgW6no26X8"
                 },
@@ -352,6 +335,44 @@ def handle_payload(psid, payload=None, text_message=None):
         # Only show quick replies if it hasn't been shown recently
         if should_show_menu(psid):
             return send_message_with_quick_replies(psid, "I can help you with the following options:")
+
+# ---------------------
+# Notification: Order Ready
+# ---------------------
+@app.route("/webhook/order-ready", methods=["POST"])
+def notify_order_ready():
+    """Send notification to customer when order is ready for pickup"""
+    try:
+        data = request.get_json()
+        psid = data.get("psid")
+        order_number = data.get("order_number")
+        customer_name = data.get("customer_name", "Customer")
+        
+        if not psid or not order_number:
+            logger.error("Missing PSID or order_number in notification request")
+            return Response(json.dumps({"error": "Missing required fields"}), status=400, mimetype="application/json")
+        
+        logger.info(f"Sending order ready notification to PSID {psid} for order {order_number}")
+        
+        # Send notification message to customer
+        message_text = (
+            f"Good news! Your order #{order_number} is ready for pickup!\n\n"
+            f"Please come to {get_config_value('contact.restaurant_name', 'Pedro\\'s Restaurant')} to pick up your order.\n\n"
+            f"See you soon! Thank you for ordering with us!"
+        )
+        
+        result = call_send_api(psid, {"text": message_text})
+        
+        if result:
+            logger.info(f"Order ready notification sent successfully to {customer_name}")
+            return Response(json.dumps({"success": True, "message": "Customer notified"}), status=200, mimetype="application/json")
+        else:
+            logger.error("Failed to send notification via Facebook API")
+            return Response(json.dumps({"error": "Failed to send message"}), status=500, mimetype="application/json")
+            
+    except Exception as e:
+        logger.error(f"Error in order ready notification: {e}")
+        return Response(json.dumps({"error": str(e)}), status=500, mimetype="application/json")
 
 # ---------------------
 # Webhook
