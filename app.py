@@ -1,45 +1,50 @@
-# ---------------------
-# Notification: Order Ready
-# ---------------------
-@app.route("/webhook/order-ready", methods=["POST"])
-def notify_order_ready():
-    """Send notification to customer when order is ready for pickup"""
-    try:
-        data = request.get_json()
-        psid = data.get("psid")
-        order_number = data.get("order_number")
-        customer_name = data.get("customer_name", "Customer")
-        
-        if not psid or not order_number:
-            logger.error("Missing PSID or order_number in notification request")
-            return Response(json.dumps({"error": "Missing required fields"}), status=400, mimetype="application/json")
-        
-        logger.info(f"Sending order ready notification to PSID {psid} for order {order_number}")
-        
         # Send notification message to customer
+        restaurant_name = get_config_value('contact.restaurant_name', "Pedro's Restaurant")
         message_text = (
             f"Good news! Your order #{order_number} is ready for pickup!\n\n"
-            f"Please come to {get_config_value('contact.restaurant_name', 'Pedro\\'s Restaurant')} to pick up your order.\n\n"
+            f"Please come to {restaurant_name} to pick up your order.\n\n"
             f"See you soon! Thank you for ordering with us!"
-        )
-        
-        result = call_send_api(psid, {"text": message_text})
-        
-        if result:
-            logger.info(f"Order ready notification sent successfully to {customer_name}")
-            return Response(json.dumps({"success": True, "message": "Customer notified"}), status=200, mimetype="application/json")
-        else:
-            logger.error("Failed to send notification via Facebook API")
-            return Response(json.dumps({"error": "Failed to send message"}), status=500, mimetype="application/json")
-            
-    except Exception as e:
-        logger.error(f"Error in order ready notification: {e}")
-        return Response(json.dumps({"error": str(e)}), status=500, mimetype="application/json")
+        )fig(level=logging.INFO)
+logger = logging.getLogger("FBBot")
 
 # ---------------------
-# Webhook
+# Tokens
 # ---------------------
-@app.route("/webhook", methods=["GET", "POST"])
+PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "<YOUR_PAGE_ACCESS_TOKEN>")
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "123darcscar")
+FB_GRAPH = "https://graph.facebook.com/v19.0"
+
+# ---------------------
+# SUPABASE Configuration
+# ---------------------
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://tgawpkpcfrxobgrsysic.supabase.co")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "your-anon-key-here")
+
+# ---------------------
+# Configuration management
+# ---------------------
+CONFIG_FILE = "config.json"
+config = {}
+config_last_modified = None
+
+def load_config():
+    """Load configuration from config.json and cache it"""
+    global config, config_last_modified
+    try:
+        if os.path.exists(CONFIG_FILE):
+            current_modified = os.path.getmtime(CONFIG_FILE)
+            if config_last_modified != current_modified:
+                with open(CONFIG_FILE, 'r') as f:
+                    config = json.load(f)
+                config_last_modified = current_modified
+                logger.info(f"Configuration loaded/reloaded from {CONFIG_FILE}")
+        else:
+            # Fallback default config
+            config = {
+                "store_hours": {"open_time": "10:00", "close_time": "22:00", "timezone": "Asia/Manila"},
+                "contact": {"phone_number": "09171505518 / (042)4215968"},
+                "urls": {
+                    "foodpanda": "https://www.foodpanda.ph/restaurant/locg/pedros-old-manila-rd",
                     "menu": "https://i.imgur.com/c2ir2Qy.jpeg",
                     "google_map": "https://maps.app.goo.gl/GQUDgxLqgW6no26X8"
                 },
@@ -355,9 +360,10 @@ def notify_order_ready():
         logger.info(f"Sending order ready notification to PSID {psid} for order {order_number}")
         
         # Send notification message to customer
+        restaurant_name = get_config_value('contact.restaurant_name', "Pedro's Restaurant")
         message_text = (
             f"Good news! Your order #{order_number} is ready for pickup!\n\n"
-            f"Please come to {get_config_value('contact.restaurant_name', 'Pedro\\'s Restaurant')} to pick up your order.\n\n"
+            f"Please come to {restaurant_name} to pick up your order.\n\n"
             f"See you soon! Thank you for ordering with us!"
         )
         
