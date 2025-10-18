@@ -1,0 +1,78 @@
+{
+  "pricing": {
+    "stir_fry": {
+      "sweet and spicy pork ribs small": 180,
+      "sweet and spicy pork ribs double": 279,
+      "beef broccoli small": 149,
+      "beef broccoli double": 259,
+      "beef mushroom small": 149,
+      "beef mushroom double": 259,
+      "black pepper beef small": 149,
+      "black pepper beef double": 259,
+      "thai pork cashew small": 149,
+      "thai pork cashew double": 229,
+      "shrimp w/ veggie small": 169,
+      "shrimp w/ veggie double": 269,
+      "squid w/ veggie small": 149,
+      "squid w/ veggie double": 249,
+      "pad kra pao small": 129,
+      "pad kra pao double": 210,
+      "orange chicken small": 129,
+      "orange chicken double": 210,
+      "chicken w/ mushroom small": 129,
+      "chicken w/ mushroom double": 210,
+      "spicy pork strips small": 129,
+      "spicy pork strips double": 210,
+      "kung pao chicken small": 129,
+      "kung pao chicken double": 210,
+      "general tso chicken small": 129,
+      "general tso chicken double": 210
+    },
+    "grill_master": {
+      "vietnamese chicken w/ rice": 145,
+      "peri peri chicken w/ rice": 155,
+      "grilled liempo w/ rice": 165
+    },
+    "yangchow_special": {
+      "yangchow w/ pork tonkatsu": 145,
+      "yangchow w/ sweet & sour pork": 145,
+      "yangchow w/ chicken fillet": 145,
+      "yangchow w/ general tso chicken": 145,
+      "yangchow w/ lechon kawali": 145
+    },
+    "sizzling_special": {
+      "sizzling liempo": 99,
+      "sizzling pork chop": 99,
+      "sizzling sisig": 99,
+      "sizzling chicken": 99,
+      "sizzling chicharon bulaklak": 99
+    },
+    "silog_special": {
+      "tapsilog": 89,
+      "tocilog": 89,
+      "bangsilog": 89,
+      "chicksilog": 99,
+      "longsilog": 89,
+      "adobosilog": 89
+    },
+    "short_order": {
+      "chami solo": 70,
+      "chami large": 220,
+      "miki bihon solo": 70,
+      "miki bihon large": 240,
+      "lomi batangas solo": 70,
+      "lomi batangas large": 240
+    },
+    "drinks": {
+      "cucumber lemonade": 25,
+      "red iced tea": 25,
+      "blue lemonade": 25,
+      "samalamig": 25,
+      "milky melon": 25
+    },
+    "extras": {
+      "rice": 15,
+      "plain rice": 15
+    }
+  }
+}
