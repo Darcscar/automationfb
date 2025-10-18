@@ -1,31 +1,19 @@
-"""
-FINAL WORKING VERSION - Facebook Bot for Pedro's Restaurant
-Copy this ENTIRE file to your app.py
-"""
-
-import os
-import json
-import logging
-from flask import Flask, request, Response
-try:
-    from flask_cors import CORS
-    CORS_AVAILABLE = True
-except ImportError:
-    CORS_AVAILABLE = False
-    print("Warning: flask-cors not available, CORS disabled")
-import requests
-from datetime import datetime, time, date, timedelta
-from zoneinfo import ZoneInfo
-
-app = Flask(__name__)
-if CORS_AVAILABLE:
-    CORS(app)  # Enable CORS for all routes
-
-# Logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("FBBot")
-
-# Tokens
+        payload = {
+            "order_number": order_number,
+            "facebook_psid": psid,
+            "order_text": order_text,  # Original customer text
+            "order_type": "pickup",
+            "status": "pending",
+            "order_date": now.isoformat(),
+            "estimated_total": estimated_total,
+            "customer_name": f"Facebook Customer {psid[-4:]}"
+        }
+        
+        # Add complete_menu_name only if the column exists (for backward compatibility)
+        try:
+            payload["complete_menu_name"] = complete_menu_name
+        except:
+            pass  # Column doesn't exist yet, skip itkens
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "EAHJTYAULctYBPozkAuQsRvMfnqGRaz1kprNm3wxmF9gZA4hx9LtWaSZClpnk9fiDGQ4uSe0Fwv7GCGyJN8G4yVvs7UZAASRL4mhBOy6nqwhe2OZA9ovZC7ACU3JdOF4hag9JTmhLVKuK7nVcZAcj6QZAwpnG437jtXLeL6K6xREI04ZB8L2f06rrbaCSiKXmalbTUCuEZCN4ArgZDZD")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "123darcscar")
 FB_GRAPH = "https://graph.facebook.com/v19.0"
@@ -36,8 +24,14 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6
 
 # Configuration
 CONFIG_FILE = "config.json"
+MENU_CONFIG_FILE = "menu_config.json"
+PRICING_CONFIG_FILE = "pricing_config.json"
 config = {}
+menu_config = {}
+pricing_config = {}
 config_last_modified = None
+menu_config_last_modified = None
+pricing_config_last_modified = None
 
 def load_config():
     global config, config_last_modified
@@ -64,7 +58,43 @@ def load_config():
     except Exception as e:
         logger.error(f"Error loading config: {e}")
 
+def load_menu_config():
+    global menu_config, menu_config_last_modified
+    try:
+        if os.path.exists(MENU_CONFIG_FILE):
+            current_modified = os.path.getmtime(MENU_CONFIG_FILE)
+            if menu_config_last_modified != current_modified:
+                with open(MENU_CONFIG_FILE, 'r') as f:
+                    menu_config = json.load(f)
+                menu_config_last_modified = current_modified
+                logger.info(f"Menu configuration loaded from {MENU_CONFIG_FILE}")
+        else:
+            logger.warning(f"{MENU_CONFIG_FILE} not found, using empty menu")
+            menu_config = {"menu_items": {}, "quantities": [], "order_keywords": []}
+    except Exception as e:
+        logger.error(f"Error loading menu config: {e}")
+        menu_config = {"menu_items": {}, "quantities": [], "order_keywords": []}
+
+def load_pricing_config():
+    global pricing_config, pricing_config_last_modified
+    try:
+        if os.path.exists(PRICING_CONFIG_FILE):
+            current_modified = os.path.getmtime(PRICING_CONFIG_FILE)
+            if pricing_config_last_modified != current_modified:
+                with open(PRICING_CONFIG_FILE, 'r') as f:
+                    pricing_config = json.load(f)
+                pricing_config_last_modified = current_modified
+                logger.info(f"Pricing configuration loaded from {PRICING_CONFIG_FILE}")
+        else:
+            logger.warning(f"{PRICING_CONFIG_FILE} not found, using default pricing")
+            pricing_config = {"pricing": {}}
+    except Exception as e:
+        logger.error(f"Error loading pricing config: {e}")
+        pricing_config = {"pricing": {}}
+
 load_config()
+load_menu_config()
+load_pricing_config()
 
 def get_config_value(key_path, default=None):
     load_config()
@@ -76,6 +106,172 @@ def get_config_value(key_path, default=None):
         else:
             return default
     return value if value is not None else default
+
+def get_complete_menu_name(order_text):
+    """Get the complete menu name for the order"""
+    load_menu_config()
+    
+    if not menu_config or not menu_config.get("menu_items"):
+        return order_text  # Fallback to original text
+    
+    text_lower = order_text.lower().strip()
+    all_menu_items = []
+    
+    # Get all menu items from all categories
+    for category, items in menu_config.get("menu_items", {}).items():
+        all_menu_items.extend(items)
+    
+    # Find the best match
+    best_match = None
+    best_score = 0
+    
+    for item in all_menu_items:
+        item_lower = item.lower()
+        
+        # Direct match (highest priority)
+        if item_lower in text_lower:
+            return item
+            
+        # Flexible matching
+        item_clean = item_lower.replace(' w/', ' ').replace(' with ', ' ').replace(' & ', ' and ')
+        text_clean = text_lower.replace(' w/', ' ').replace(' with ', ' ').replace(' & ', ' and ')
+        
+        if item_clean in text_clean:
+            return item
+            
+        # Word-based matching
+        item_words = [word for word in item_clean.split() if len(word) > 2]
+        text_words = [word for word in text_clean.split() if len(word) > 2]
+        matching_words = [word for word in item_words if word in text_words]
+        
+        if len(matching_words) >= 2 and len(matching_words) > best_score:
+            best_match = item
+            best_score = len(matching_words)
+    
+    return best_match if best_match else order_text
+
+def calculate_order_total(order_text):
+    """Calculate estimated total for Facebook orders based on menu items"""
+    load_pricing_config()
+    
+    if not pricing_config or not pricing_config.get("pricing"):
+        logger.warning("No pricing configuration found, returning 0")
+        return 0
+    
+    text_lower = order_text.lower().strip()
+    total = 0
+    
+    # Get all pricing from the external file (excluding free requests)
+    all_pricing = {}
+    for category, items in pricing_config.get("pricing", {}).items():
+        if category != "free_requests":  # Skip free requests from pricing
+            all_pricing.update(items)
+    
+    # Count quantities and calculate total
+    for item, price in all_pricing.items():
+        if item in text_lower:
+            # Try to extract quantity
+            quantity = 1
+            for qty_word in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
+                if qty_word in text_lower:
+                    if qty_word.isdigit():
+                        quantity = int(qty_word)
+                    elif qty_word == "two":
+                        quantity = 2
+                    elif qty_word == "three":
+                        quantity = 3
+                    elif qty_word == "four":
+                        quantity = 4
+                    elif qty_word == "five":
+                        quantity = 5
+                    break
+            
+            total += quantity * price
+            logger.info(f"Found item '{item}' with quantity {quantity} at ₱{price} each = ₱{quantity * price}")
+    
+    logger.info(f"Total calculated: ₱{total}")
+    return total
+
+def validate_order_text(text):
+    """Check if the text contains valid menu items"""
+    load_menu_config()
+    
+    if not menu_config or not menu_config.get("menu_items"):
+        # If no menu config, allow all orders (fallback)
+        return True, "Order accepted (no menu validation)"
+    
+    text_lower = text.lower().strip()
+    
+    # Get all menu items from all categories (excluding free requests)
+    all_menu_items = []
+    for category, items in menu_config.get("menu_items", {}).items():
+        if category not in ['free_requests']:  # Exclude free requests from main validation
+            all_menu_items.extend(items)
+    
+    # Also include chargeable extras
+    chargeable_extras = menu_config.get("menu_items", {}).get("chargeable_extras", [])
+    all_menu_items.extend(chargeable_extras)
+    
+    # Check if any menu item is mentioned in the text
+    found_items = []
+    match_scores = {}  # Track match quality for prioritization
+    
+    for item in all_menu_items:
+        item_lower = item.lower()
+        text_lower = text.lower().strip()
+        
+        # Direct match (highest priority)
+        if item_lower in text_lower:
+            found_items.append(item)
+            match_scores[item] = 100  # Perfect match
+            continue
+            
+        # Flexible matching for common variations
+        # Remove common separators and check for partial matches
+        item_clean = item_lower.replace(' w/', ' ').replace(' with ', ' ').replace(' & ', ' and ')
+        text_clean = text_lower.replace(' w/', ' ').replace(' with ', ' ').replace(' & ', ' and ')
+        
+        if item_clean in text_clean:
+            found_items.append(item)
+            match_scores[item] = 90  # Very good match
+            continue
+            
+        # Check if all key words from item are in text
+        item_words = [word for word in item_clean.split() if len(word) > 2]  # Skip short words
+        if len(item_words) >= 2 and all(word in text_clean for word in item_words):
+            found_items.append(item)
+            match_scores[item] = 80  # Good match
+            continue
+            
+        # Check for partial matches (at least 2 significant words match)
+        text_words = [word for word in text_clean.split() if len(word) > 2]
+        matching_words = [word for word in item_words if word in text_words]
+        if len(matching_words) >= 2:
+            found_items.append(item)
+            match_scores[item] = 70  # Partial match
+    
+    if found_items:
+        # Sort by match score (highest first) to prioritize better matches
+        sorted_items = sorted(found_items, key=lambda x: match_scores.get(x, 0), reverse=True)
+        
+        # For ambiguous cases (like "lechon kawali"), prefer more specific matches
+        best_matches = []
+        for item in sorted_items:
+            # If we have multiple matches, prefer the most specific one
+            if len(best_matches) == 0 or match_scores[item] >= match_scores[best_matches[0]]:
+                best_matches.append(item)
+            elif match_scores[item] < match_scores[best_matches[0]] - 10:  # Significant difference
+                break
+        
+        return True, f"Valid order containing: {', '.join(best_matches)}"
+    
+    # Check if it looks like a question or non-order
+    question_words = ['what', 'how', 'when', 'where', 'why', 'can', 'could', 'would', 'should', 'is', 'are', 'do', 'does']
+    if any(word in text_lower for word in question_words) and len(text) < 50:
+        return False, "This appears to be a question, not an order"
+    
+    # If no menu items found and doesn't look like a question, ask for clarification
+    return False, "I don't recognize any menu items in your message. Please check our menu and try again."
 
 # User states
 user_states = {}
@@ -90,6 +286,10 @@ def save_order_to_supabase(psid, order_text):
         # Include time to make order number unique (even if same customer orders multiple times per day)
         order_number = f"FB-{now.strftime('%Y%m%d%H%M%S')}-{psid[-6:]}"
         
+        # Get complete menu name and calculate estimated total
+        complete_menu_name = get_complete_menu_name(order_text)
+        estimated_total = calculate_order_total(order_text)
+        
         url = f"{SUPABASE_URL}/rest/v1/online_orders"
         headers = {
             "apikey": SUPABASE_ANON_KEY,
@@ -100,16 +300,24 @@ def save_order_to_supabase(psid, order_text):
         payload = {
             "order_number": order_number,
             "facebook_psid": psid,
-            "order_text": order_text,
+            "order_text": order_text,  # Original customer text
             "order_type": "pickup",
             "status": "pending",
-            "order_date": now.isoformat()
+            "order_date": now.isoformat(),
+            "estimated_total": estimated_total,
+            "customer_name": f"Facebook Customer {psid[-4:]}"
         }
+        
+        # Add complete_menu_name only if the column exists (for backward compatibility)
+        try:
+            payload["complete_menu_name"] = complete_menu_name
+        except:
+            pass  # Column doesn't exist yet, skip it
         
         response = requests.post(url, headers=headers, json=payload, timeout=15)
         response.raise_for_status()
         
-        logger.info(f"Order saved to Supabase: {order_number}")
+        logger.info(f"Order saved to Supabase: {order_number} (Estimated total: ₱{estimated_total})")
         return True, order_number
         
     except Exception as e:
@@ -237,19 +445,39 @@ def handle_payload(psid, payload=None, text_message=None):
             now = get_manila_time().time()
             open_time, close_time = get_store_hours()
             if now < open_time:
-                call_send_api(psid, {"text": f"Great! You can place an advance order now. We'll open at {open_time.strftime('%I:%M %p')} and prepare your order. Please type your order:"})
+                call_send_api(psid, {"text": f"Great! You can place an advance order now. We'll open at {open_time.strftime('%I:%M %p')} and prepare your order.\n\nPlease type your order (or type 'cancel' to stop):"})
             else:
-                call_send_api(psid, {"text": f"Perfect! You can place an advance order now. We'll prepare it when we open tomorrow at {open_time.strftime('%I:%M %p')}. Please type your order:"})
+                call_send_api(psid, {"text": f"Perfect! You can place an advance order now. We'll prepare it when we open tomorrow at {open_time.strftime('%I:%M %p')}.\n\nPlease type your order (or type 'cancel' to stop):"})
         else:
-            call_send_api(psid, {"text": "Please type your advance order now:"})
+            call_send_api(psid, {"text": "Please type your advance order now (or type 'cancel' to stop):"})
         
         user_states[psid] = "awaiting_order"
         return
 
     if user_states.get(psid) == "awaiting_order" and text_message:
+        # Check for cancellation commands first
+        lower_text = text_message.lower().strip()
+        cancel_commands = ['cancel', 'stop', 'quit', 'exit', 'no', 'nevermind', 'never mind']
+        
+        if any(cmd in lower_text for cmd in cancel_commands):
+            user_states.pop(psid, None)
+            return send_message_with_quick_replies(psid, "Order cancelled. How can I help you today?")
+        
+        # Validate the order text
+        is_valid, validation_message = validate_order_text(text_message)
+        
+        if not is_valid:
+            # Send validation error and keep user in order mode
+            call_send_api(psid, {"text": f"{validation_message}\n\nPlease type your order again (or 'cancel' to stop):"})
+            return
+        
+        # If valid, process the order
         success, order_number = save_order_to_supabase(psid, text_message)
         
         if success:
+            # Calculate estimated total for display
+            estimated_total = calculate_order_total(text_message)
+            
             # Add pickup time information based on store status
             if is_store_open():
                 pickup_info = "We'll prepare your order and contact you when it's ready."
@@ -261,7 +489,10 @@ def handle_payload(psid, payload=None, text_message=None):
                 else:
                     pickup_info = f"We'll prepare your order when we open tomorrow at {open_time.strftime('%I:%M %p')} and contact you when it's ready."
             
-            return send_message_with_quick_replies(psid, f"Your advance order has been received!\n\nOrder Number: {order_number}\n\n{pickup_info} Thank you!")
+            # Include estimated total in confirmation
+            total_info = f"Estimated Total: ₱{estimated_total}\n\n" if estimated_total > 0 else ""
+            
+            return send_message_with_quick_replies(psid, f"Your advance order has been received!\n\nOrder Number: {order_number}\n\n{total_info}{pickup_info} Thank you!")
         else:
             call_send_api(psid, {"text": "Sorry, we couldn't process your order. Please try again later."})
         
