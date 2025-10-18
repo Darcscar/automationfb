@@ -7,26 +7,32 @@ import os
 import json
 import logging
 from flask import Flask, request, Response
-from flask_cors import CORS
+try:
+    from flask_cors import CORS
+    CORS_AVAILABLE = True
+except ImportError:
+    CORS_AVAILABLE = False
+    print("Warning: flask-cors not available, CORS disabled")
 import requests
 from datetime import datetime, time, date, timedelta
 from zoneinfo import ZoneInfo
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+if CORS_AVAILABLE:
+    CORS(app)  # Enable CORS for all routes
 
 # Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("FBBot")
 
 # Tokens
-PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "EAHJTYAULctYBPozkAuQsRvMfnqGRaz1kprNm3wxmF9gZA4hx9LtWaSZClpnk9fiDGQ4uSe0Fwv7GCGyJN8G4yVvs7UZAASRL4mhBOy6nqwhe2OZA9ovZC7ACU3JdOF4hag9JTmhLVKuK7nVcZAcj6QZAwpnG437jtXLeL6K6xREI04ZB8L2f06rrbaCSiKXmalbTUCuEZCN4ArgZDZD")
+PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "<YOUR_PAGE_ACCESS_TOKEN>")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "123darcscar")
 FB_GRAPH = "https://graph.facebook.com/v19.0"
 
 # Supabase Configuration
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://tgawpkpcfrxobgrsysic.supabase.co")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnYXdwa3BjZnJ4b2JncnN5c2ljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM1ODI5NjQsImV4cCI6MjA2OTE1ODk2NH0.AsNuusVkPzozfCB6QTyLy5cnQUgwmXsjNhNH3hb75Ew")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "your-anon-key-here")
 
 # Configuration
 CONFIG_FILE = "config.json"
@@ -226,15 +232,17 @@ def handle_payload(psid, payload=None, text_message=None):
         return send_message_with_quick_replies(psid, welcome_text)
 
     if payload == "Q_ADVANCE_ORDER":
+        # Always allow advance orders, but show different messages based on store status
         if not is_store_open():
             now = get_manila_time().time()
             open_time, close_time = get_store_hours()
             if now < open_time:
-                call_send_api(psid, {"text": f"Sorry, we're closed right now. We'll open today at {open_time.strftime('%I:%M %p')}."})
+                call_send_api(psid, {"text": f"Great! You can place an advance order now. We'll open at {open_time.strftime('%I:%M %p')} and prepare your order. Please type your order:"})
             else:
-                call_send_api(psid, {"text": f"Sorry, we're closed now. We'll open tomorrow at {open_time.strftime('%I:%M %p')}."})
-            return
-        call_send_api(psid, {"text": "Please type your order now:"})
+                call_send_api(psid, {"text": f"Perfect! You can place an advance order now. We'll prepare it when we open tomorrow at {open_time.strftime('%I:%M %p')}. Please type your order:"})
+        else:
+            call_send_api(psid, {"text": "Please type your advance order now:"})
+        
         user_states[psid] = "awaiting_order"
         return
 
@@ -242,7 +250,18 @@ def handle_payload(psid, payload=None, text_message=None):
         success, order_number = save_order_to_supabase(psid, text_message)
         
         if success:
-            return send_message_with_quick_replies(psid, f"Your advance order has been received!\n\nOrder Number: {order_number}\n\nWe'll prepare your order and contact you when it's ready. Thank you!")
+            # Add pickup time information based on store status
+            if is_store_open():
+                pickup_info = "We'll prepare your order and contact you when it's ready."
+            else:
+                now = get_manila_time().time()
+                open_time, close_time = get_store_hours()
+                if now < open_time:
+                    pickup_info = f"We'll prepare your order when we open at {open_time.strftime('%I:%M %p')} and contact you when it's ready."
+                else:
+                    pickup_info = f"We'll prepare your order when we open tomorrow at {open_time.strftime('%I:%M %p')} and contact you when it's ready."
+            
+            return send_message_with_quick_replies(psid, f"Your advance order has been received!\n\nOrder Number: {order_number}\n\n{pickup_info} Thank you!")
         else:
             call_send_api(psid, {"text": "Sorry, we couldn't process your order. Please try again later."})
         
@@ -337,4 +356,3 @@ if __name__ == "__main__":
     PORT = int(os.getenv("PORT", 10000))
     logger.info(f"Starting Flask app on port {PORT}...")
     app.run(host="0.0.0.0", port=PORT, debug=True)
-
