@@ -36,8 +36,11 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6
 
 # Configuration
 CONFIG_FILE = "config.json"
+MENU_CONFIG_FILE = "menu_config.json"
 config = {}
+menu_config = {}
 config_last_modified = None
+menu_config_last_modified = None
 
 def load_config():
     global config, config_last_modified
@@ -64,7 +67,25 @@ def load_config():
     except Exception as e:
         logger.error(f"Error loading config: {e}")
 
+def load_menu_config():
+    global menu_config, menu_config_last_modified
+    try:
+        if os.path.exists(MENU_CONFIG_FILE):
+            current_modified = os.path.getmtime(MENU_CONFIG_FILE)
+            if menu_config_last_modified != current_modified:
+                with open(MENU_CONFIG_FILE, 'r') as f:
+                    menu_config = json.load(f)
+                menu_config_last_modified = current_modified
+                logger.info(f"Menu configuration loaded from {MENU_CONFIG_FILE}")
+        else:
+            logger.warning(f"{MENU_CONFIG_FILE} not found, using empty menu")
+            menu_config = {"menu_items": {}, "quantities": [], "order_keywords": []}
+    except Exception as e:
+        logger.error(f"Error loading menu config: {e}")
+        menu_config = {"menu_items": {}, "quantities": [], "order_keywords": []}
+
 load_config()
+load_menu_config()
 
 def get_config_value(key_path, default=None):
     load_config()
@@ -76,6 +97,38 @@ def get_config_value(key_path, default=None):
         else:
             return default
     return value if value is not None else default
+
+def validate_order_text(text):
+    """Check if the text contains valid menu items"""
+    load_menu_config()
+    
+    if not menu_config or not menu_config.get("menu_items"):
+        # If no menu config, allow all orders (fallback)
+        return True, "Order accepted (no menu validation)"
+    
+    text_lower = text.lower().strip()
+    
+    # Get all menu items from all categories
+    all_menu_items = []
+    for category, items in menu_config.get("menu_items", {}).items():
+        all_menu_items.extend(items)
+    
+    # Check if any menu item is mentioned in the text
+    found_items = []
+    for item in all_menu_items:
+        if item.lower() in text_lower:
+            found_items.append(item)
+    
+    if found_items:
+        return True, f"Valid order containing: {', '.join(found_items)}"
+    
+    # Check if it looks like a question or non-order
+    question_words = ['what', 'how', 'when', 'where', 'why', 'can', 'could', 'would', 'should', 'is', 'are', 'do', 'does']
+    if any(word in text_lower for word in question_words) and len(text) < 50:
+        return False, "This appears to be a question, not an order"
+    
+    # If no menu items found and doesn't look like a question, ask for clarification
+    return False, "I don't recognize any menu items in your message. Please check our menu and try again."
 
 # User states
 user_states = {}
@@ -255,7 +308,15 @@ def handle_payload(psid, payload=None, text_message=None):
             user_states.pop(psid, None)
             return send_message_with_quick_replies(psid, "Order cancelled. How can I help you today?")
         
-        # Treat everything else as an order
+        # Validate the order text
+        is_valid, validation_message = validate_order_text(text_message)
+        
+        if not is_valid:
+            # Send validation error and keep user in order mode
+            call_send_api(psid, {"text": f"{validation_message}\n\nPlease type your order again (or 'cancel' to stop):"})
+            return
+        
+        # If valid, process the order
         success, order_number = save_order_to_supabase(psid, text_message)
         
         if success:
