@@ -26,13 +26,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("FBBot")
 
 # Tokens
-PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "EAHJTYAULctYBPozkAuQsRvMfnqGRaz1kprNm3wxmF9gZA4hx9LtWaSZClpnk9fiDGQ4uSe0Fwv7GCGyJN8G4yVvs7UZAASRL4mhBOy6nqwhe2OZA9ovZC7ACU3JdOF4hag9JTmhLVKuK7nVcZAcj6QZAwpnG437jtXLeL6K6xREI04ZB8L2f06rrbaCSiKXmalbTUCuEZCN4ArgZDZD")
+PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "<YOUR_PAGE_ACCESS_TOKEN>")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "123darcscar")
 FB_GRAPH = "https://graph.facebook.com/v19.0"
 
 # Supabase Configuration
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://tgawpkpcfrxobgrsysic.supabase.co")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnYXdwa3BjZnJ4b2JncnN5c2ljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM1ODI5NjQsImV4cCI6MjA2OTE1ODk2NH0.AsNuusVkPzozfCB6QTyLy5cnQUgwmXsjNhNH3hb75Ew")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "your-anon-key-here")
 
 # Configuration
 CONFIG_FILE = "config.json"
@@ -119,6 +119,49 @@ def get_config_value(key_path, default=None):
             return default
     return value if value is not None else default
 
+def get_complete_menu_name(order_text):
+    """Get the complete menu name for the order"""
+    load_menu_config()
+    
+    if not menu_config or not menu_config.get("menu_items"):
+        return order_text  # Fallback to original text
+    
+    text_lower = order_text.lower().strip()
+    all_menu_items = []
+    
+    # Get all menu items from all categories
+    for category, items in menu_config.get("menu_items", {}).items():
+        all_menu_items.extend(items)
+    
+    # Find the best match
+    best_match = None
+    best_score = 0
+    
+    for item in all_menu_items:
+        item_lower = item.lower()
+        
+        # Direct match (highest priority)
+        if item_lower in text_lower:
+            return item
+            
+        # Flexible matching
+        item_clean = item_lower.replace(' w/', ' ').replace(' with ', ' ').replace(' & ', ' and ')
+        text_clean = text_lower.replace(' w/', ' ').replace(' with ', ' ').replace(' & ', ' and ')
+        
+        if item_clean in text_clean:
+            return item
+            
+        # Word-based matching
+        item_words = [word for word in item_clean.split() if len(word) > 2]
+        text_words = [word for word in text_clean.split() if len(word) > 2]
+        matching_words = [word for word in item_words if word in text_words]
+        
+        if len(matching_words) >= 2 and len(matching_words) > best_score:
+            best_match = item
+            best_score = len(matching_words)
+    
+    return best_match if best_match else order_text
+
 def calculate_order_total(order_text):
     """Calculate estimated total for Facebook orders based on menu items"""
     load_pricing_config()
@@ -130,10 +173,11 @@ def calculate_order_total(order_text):
     text_lower = order_text.lower().strip()
     total = 0
     
-    # Get all pricing from the external file
+    # Get all pricing from the external file (excluding free requests)
     all_pricing = {}
     for category, items in pricing_config.get("pricing", {}).items():
-        all_pricing.update(items)
+        if category != "free_requests":  # Skip free requests from pricing
+            all_pricing.update(items)
     
     # Count quantities and calculate total
     for item, price in all_pricing.items():
@@ -170,19 +214,68 @@ def validate_order_text(text):
     
     text_lower = text.lower().strip()
     
-    # Get all menu items from all categories
+    # Get all menu items from all categories (excluding free requests)
     all_menu_items = []
     for category, items in menu_config.get("menu_items", {}).items():
-        all_menu_items.extend(items)
+        if category not in ['free_requests']:  # Exclude free requests from main validation
+            all_menu_items.extend(items)
+    
+    # Also include chargeable extras
+    chargeable_extras = menu_config.get("menu_items", {}).get("chargeable_extras", [])
+    all_menu_items.extend(chargeable_extras)
     
     # Check if any menu item is mentioned in the text
     found_items = []
+    match_scores = {}  # Track match quality for prioritization
+    
     for item in all_menu_items:
-        if item.lower() in text_lower:
+        item_lower = item.lower()
+        text_lower = text.lower().strip()
+        
+        # Direct match (highest priority)
+        if item_lower in text_lower:
             found_items.append(item)
+            match_scores[item] = 100  # Perfect match
+            continue
+            
+        # Flexible matching for common variations
+        # Remove common separators and check for partial matches
+        item_clean = item_lower.replace(' w/', ' ').replace(' with ', ' ').replace(' & ', ' and ')
+        text_clean = text_lower.replace(' w/', ' ').replace(' with ', ' ').replace(' & ', ' and ')
+        
+        if item_clean in text_clean:
+            found_items.append(item)
+            match_scores[item] = 90  # Very good match
+            continue
+            
+        # Check if all key words from item are in text
+        item_words = [word for word in item_clean.split() if len(word) > 2]  # Skip short words
+        if len(item_words) >= 2 and all(word in text_clean for word in item_words):
+            found_items.append(item)
+            match_scores[item] = 80  # Good match
+            continue
+            
+        # Check for partial matches (at least 2 significant words match)
+        text_words = [word for word in text_clean.split() if len(word) > 2]
+        matching_words = [word for word in item_words if word in text_words]
+        if len(matching_words) >= 2:
+            found_items.append(item)
+            match_scores[item] = 70  # Partial match
     
     if found_items:
-        return True, f"Valid order containing: {', '.join(found_items)}"
+        # Sort by match score (highest first) to prioritize better matches
+        sorted_items = sorted(found_items, key=lambda x: match_scores.get(x, 0), reverse=True)
+        
+        # For ambiguous cases (like "lechon kawali"), prefer more specific matches
+        best_matches = []
+        for item in sorted_items:
+            # If we have multiple matches, prefer the most specific one
+            if len(best_matches) == 0 or match_scores[item] >= match_scores[best_matches[0]]:
+                best_matches.append(item)
+            elif match_scores[item] < match_scores[best_matches[0]] - 10:  # Significant difference
+                break
+        
+        return True, f"Valid order containing: {', '.join(best_matches)}"
     
     # Check if it looks like a question or non-order
     question_words = ['what', 'how', 'when', 'where', 'why', 'can', 'could', 'would', 'should', 'is', 'are', 'do', 'does']
@@ -205,7 +298,8 @@ def save_order_to_supabase(psid, order_text):
         # Include time to make order number unique (even if same customer orders multiple times per day)
         order_number = f"FB-{now.strftime('%Y%m%d%H%M%S')}-{psid[-6:]}"
         
-        # Calculate estimated total for sales reporting
+        # Get complete menu name and calculate estimated total
+        complete_menu_name = get_complete_menu_name(order_text)
         estimated_total = calculate_order_total(order_text)
         
         url = f"{SUPABASE_URL}/rest/v1/online_orders"
@@ -218,7 +312,8 @@ def save_order_to_supabase(psid, order_text):
         payload = {
             "order_number": order_number,
             "facebook_psid": psid,
-            "order_text": order_text,
+            "order_text": order_text,  # Original customer text
+            "complete_menu_name": complete_menu_name,  # Complete menu name for POS
             "order_type": "pickup",
             "status": "pending",
             "order_date": now.isoformat(),
