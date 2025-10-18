@@ -37,10 +37,13 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6
 # Configuration
 CONFIG_FILE = "config.json"
 MENU_CONFIG_FILE = "menu_config.json"
+PRICING_CONFIG_FILE = "pricing_config.json"
 config = {}
 menu_config = {}
+pricing_config = {}
 config_last_modified = None
 menu_config_last_modified = None
+pricing_config_last_modified = None
 
 def load_config():
     global config, config_last_modified
@@ -84,8 +87,26 @@ def load_menu_config():
         logger.error(f"Error loading menu config: {e}")
         menu_config = {"menu_items": {}, "quantities": [], "order_keywords": []}
 
+def load_pricing_config():
+    global pricing_config, pricing_config_last_modified
+    try:
+        if os.path.exists(PRICING_CONFIG_FILE):
+            current_modified = os.path.getmtime(PRICING_CONFIG_FILE)
+            if pricing_config_last_modified != current_modified:
+                with open(PRICING_CONFIG_FILE, 'r') as f:
+                    pricing_config = json.load(f)
+                pricing_config_last_modified = current_modified
+                logger.info(f"Pricing configuration loaded from {PRICING_CONFIG_FILE}")
+        else:
+            logger.warning(f"{PRICING_CONFIG_FILE} not found, using default pricing")
+            pricing_config = {"pricing": {}}
+    except Exception as e:
+        logger.error(f"Error loading pricing config: {e}")
+        pricing_config = {"pricing": {}}
+
 load_config()
 load_menu_config()
+load_pricing_config()
 
 def get_config_value(key_path, default=None):
     load_config()
@@ -97,6 +118,47 @@ def get_config_value(key_path, default=None):
         else:
             return default
     return value if value is not None else default
+
+def calculate_order_total(order_text):
+    """Calculate estimated total for Facebook orders based on menu items"""
+    load_pricing_config()
+    
+    if not pricing_config or not pricing_config.get("pricing"):
+        logger.warning("No pricing configuration found, returning 0")
+        return 0
+    
+    text_lower = order_text.lower().strip()
+    total = 0
+    
+    # Get all pricing from the external file
+    all_pricing = {}
+    for category, items in pricing_config.get("pricing", {}).items():
+        all_pricing.update(items)
+    
+    # Count quantities and calculate total
+    for item, price in all_pricing.items():
+        if item in text_lower:
+            # Try to extract quantity
+            quantity = 1
+            for qty_word in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
+                if qty_word in text_lower:
+                    if qty_word.isdigit():
+                        quantity = int(qty_word)
+                    elif qty_word == "two":
+                        quantity = 2
+                    elif qty_word == "three":
+                        quantity = 3
+                    elif qty_word == "four":
+                        quantity = 4
+                    elif qty_word == "five":
+                        quantity = 5
+                    break
+            
+            total += quantity * price
+            logger.info(f"Found item '{item}' with quantity {quantity} at ₱{price} each = ₱{quantity * price}")
+    
+    logger.info(f"Total calculated: ₱{total}")
+    return total
 
 def validate_order_text(text):
     """Check if the text contains valid menu items"""
@@ -143,6 +205,9 @@ def save_order_to_supabase(psid, order_text):
         # Include time to make order number unique (even if same customer orders multiple times per day)
         order_number = f"FB-{now.strftime('%Y%m%d%H%M%S')}-{psid[-6:]}"
         
+        # Calculate estimated total for sales reporting
+        estimated_total = calculate_order_total(order_text)
+        
         url = f"{SUPABASE_URL}/rest/v1/online_orders"
         headers = {
             "apikey": SUPABASE_ANON_KEY,
@@ -156,13 +221,15 @@ def save_order_to_supabase(psid, order_text):
             "order_text": order_text,
             "order_type": "pickup",
             "status": "pending",
-            "order_date": now.isoformat()
+            "order_date": now.isoformat(),
+            "estimated_total": estimated_total,
+            "customer_name": f"Facebook Customer {psid[-4:]}"
         }
         
         response = requests.post(url, headers=headers, json=payload, timeout=15)
         response.raise_for_status()
         
-        logger.info(f"Order saved to Supabase: {order_number}")
+        logger.info(f"Order saved to Supabase: {order_number} (Estimated total: ₱{estimated_total})")
         return True, order_number
         
     except Exception as e:
@@ -320,6 +387,9 @@ def handle_payload(psid, payload=None, text_message=None):
         success, order_number = save_order_to_supabase(psid, text_message)
         
         if success:
+            # Calculate estimated total for display
+            estimated_total = calculate_order_total(text_message)
+            
             # Add pickup time information based on store status
             if is_store_open():
                 pickup_info = "We'll prepare your order and contact you when it's ready."
@@ -331,7 +401,10 @@ def handle_payload(psid, payload=None, text_message=None):
                 else:
                     pickup_info = f"We'll prepare your order when we open tomorrow at {open_time.strftime('%I:%M %p')} and contact you when it's ready."
             
-            return send_message_with_quick_replies(psid, f"Your advance order has been received!\n\nOrder Number: {order_number}\n\n{pickup_info} Thank you!")
+            # Include estimated total in confirmation
+            total_info = f"Estimated Total: ₱{estimated_total}\n\n" if estimated_total > 0 else ""
+            
+            return send_message_with_quick_replies(psid, f"Your advance order has been received!\n\nOrder Number: {order_number}\n\n{total_info}{pickup_info} Thank you!")
         else:
             call_send_api(psid, {"text": "Sorry, we couldn't process your order. Please try again later."})
         
