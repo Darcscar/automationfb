@@ -1,30 +1,57 @@
-        # If valid, process the order
-        success, order_number = save_order_to_supabase(psid, text_message)
-        
-        # Always clear the user state after processing (success or failure)
-        user_states.pop(psid, None)
-        
-        if success:
-            # Calculate estimated total for display
-            estimated_total = calculate_order_total(text_message)
-            
-            # Add pickup time information based on store status
-            if is_store_open():
-                pickup_info = "We'll prepare your order and contact you when it's ready."
-            else:
-                now = get_manila_time().time()
-                open_time, close_time = get_store_hours()
-                if now < open_time:
-                    pickup_info = f"We'll prepare your order when we open at {open_time.strftime('%I:%M %p')} and contact you when it's ready."
-                else:
-                    pickup_info = f"We'll prepare your order when we open tomorrow at {open_time.strftime('%I:%M %p')} and contact you when it's ready."
-            
-            # Include estimated total in confirmation
-            total_info = f"Estimated Total: ₱{estimated_total}\n\n" if estimated_total > 0 else ""
-            
-            return send_message_with_quick_replies(psid, f"Your advance order has been received!\n\nOrder Number: {order_number}\n\n{total_info}{pickup_info} Thank you!")
-        else:
-            return send_message_with_quick_replies(psid, "Sorry, we couldn't process your order. Please try again later.")'r') as f:
+"""
+FINAL WORKING VERSION - Facebook Bot for Pedro's Restaurant
+Copy this ENTIRE file to your app.py
+"""
+
+import os
+import json
+import logging
+from flask import Flask, request, Response
+try:
+    from flask_cors import CORS
+    CORS_AVAILABLE = True
+except ImportError:
+    CORS_AVAILABLE = False
+    print("Warning: flask-cors not available, CORS disabled")
+import requests
+from datetime import datetime, time, date, timedelta
+from zoneinfo import ZoneInfo
+
+app = Flask(__name__)
+if CORS_AVAILABLE:
+    CORS(app)  # Enable CORS for all routes
+
+# Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("FBBot")
+
+# Tokens
+PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "<YOUR_PAGE_ACCESS_TOKEN>")
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "123darcscar")
+FB_GRAPH = "https://graph.facebook.com/v19.0"
+
+# Supabase Configuration
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://tgawpkpcfrxobgrsysic.supabase.co")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "your-anon-key-here")
+
+# Configuration
+CONFIG_FILE = "config.json"
+MENU_CONFIG_FILE = "menu_config.json"
+PRICING_CONFIG_FILE = "pricing_config.json"
+config = {}
+menu_config = {}
+pricing_config = {}
+config_last_modified = None
+menu_config_last_modified = None
+pricing_config_last_modified = None
+
+def load_config():
+    global config, config_last_modified
+    try:
+        if os.path.exists(CONFIG_FILE):
+            current_modified = os.path.getmtime(CONFIG_FILE)
+            if config_last_modified != current_modified:
+                with open(CONFIG_FILE, 'r') as f:
                     config = json.load(f)
                 config_last_modified = current_modified
                 logger.info(f"Configuration loaded from {CONFIG_FILE}")
