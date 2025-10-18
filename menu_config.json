@@ -1,15 +1,15 @@
 {
   "menu_items": {
     "stir_fry": [
-      "sweet and spicy pork ribs", "pork ribs",
-      "beef broccoli", "beef mushroom", "black pepper beef",
-      "thai pork cashew", "pork cashew",
-      "shrimp w/ veggie", "shrimp with veggie", "shrimp vegetables",
-      "squid w/ veggie", "squid with veggie", "squid vegetables",
-      "pad kra pao", "orange chicken",
-      "chicken w/ mushroom", "chicken with mushroom", "chicken mushroom",
-      "spicy pork strips", "pork strips",
-      "kung pao chicken", "general tso chicken"
+      "sweet and spicy pork ribs", "pork ribs", "sweet spicy pork", "pork ribs",
+      "beef broccoli", "beef mushroom", "black pepper beef", "broccoli", "mushroom",
+      "thai pork cashew", "pork cashew", "thai pork", "cashew",
+      "shrimp w/ veggie", "shrimp with veggie", "shrimp vegetables", "shrimp veggie",
+      "squid w/ veggie", "squid with veggie", "squid vegetables", "squid veggie",
+      "pad kra pao", "orange chicken", "pad kra", "orange",
+      "chicken w/ mushroom", "chicken with mushroom", "chicken mushroom", "mushroom",
+      "spicy pork strips", "pork strips", "spicy pork", "strips",
+      "kung pao chicken", "general tso chicken", "kung pao", "general tso"
     ],
     "grill_master": [
       "grill master", "vietnamese chicken w/ rice", "vietnamese chicken with rice",
@@ -21,11 +21,18 @@
       "yangchow w/ sweet & sour pork", "yangchow with sweet and sour pork",
       "yangchow w/ chicken fillet", "yangchow with chicken fillet",
       "yangchow w/ general tso chicken", "yangchow with general tso chicken",
-      "yangchow w/ lechon kawali", "yangchow with lechon kawali"
+      "yangchow w/ lechon kawali", "yangchow with lechon kawali",
+      "yangchow lechon kawali", "yangchow pork tonkatsu", "yangchow sweet sour pork",
+      "yangchow chicken fillet", "yangchow general tso chicken",
+      "yangchow lechon", "yangchow tonkatsu", "yangchow sweet", "yangchow chicken",
+      "yangchow general", "yangchow", "pork tonkatsu", "sweet sour pork", 
+      "chicken fillet", "general tso chicken"
     ],
     "sizzling": [
       "sizzling special", "sizzling liempo", "sizzling pork chop",
-      "sizzling sisig", "sizzling chicken", "sizzling chicharon bulaklak"
+      "sizzling sisig", "sizzling chicken", "sizzling chicharon bulaklak",
+      "sizzling lechon kawali", "sizzling lechon", "sizzling liempo",
+      "sizzling", "liempo", "pork chop", "sisig", "chicken", "chicharon"
     ],
     "silog_special": [
       "tapsilog", "tocilog", "bangsilog", "chicksilog", "longsilog", "adobosilog"
@@ -40,9 +47,20 @@
     ],
     "rice_and_sides": [
       "rice", "steamed rice", "fried rice", "garlic rice",
-      "plain rice", "white rice", "brown rice",
-      "egg", "fried egg", "scrambled egg", "boiled egg",
-      "vegetables", "mixed vegetables", "stir-fried vegetables"
+      "plain rice", "white rice", "brown rice", "hainanese rice",
+      "egg", "fried egg", "scrambled egg", "boiled egg", "eggs",
+      "vegetables", "mixed vegetables", "stir-fried vegetables",
+      "gravy", "chili oil"
+    ],
+    "chargeable_extras": [
+      "yangchow fried rice", "fried rice", "garlic rice", "hainanese rice", "plain rice",
+      "egg", "fried egg", "scrambled egg", "boiled egg", "eggs",
+      "gravy", "chili oil"
+    ],
+    "free_requests": [
+      "soy sauce", "kalamansi", "sili", "chili", "vinegar",
+      "salt", "pepper", "extra rice", "more rice", "additional rice",
+      "water", "ice", "napkin", "utensils", "fork", "spoon"
     ]
   },
   "quantities": [
