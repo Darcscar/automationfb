@@ -255,14 +255,7 @@ def handle_payload(psid, payload=None, text_message=None):
             user_states.pop(psid, None)
             return send_message_with_quick_replies(psid, "Order cancelled. How can I help you today?")
         
-        # Check if message looks like a question or command (not an order)
-        question_words = ['what', 'how', 'when', 'where', 'why', 'can', 'could', 'would', 'should', 'is', 'are', 'do', 'does', 'menu', 'hours', 'location', 'contact']
-        if any(word in lower_text for word in question_words) and len(text_message) < 50:
-            # This looks like a question, not an order
-            user_states.pop(psid, None)
-            return send_message_with_quick_replies(psid, "I see you have a question. How can I help you?")
-        
-        # If we get here, treat it as an order
+        # Treat everything else as an order
         success, order_number = save_order_to_supabase(psid, text_message)
         
         if success:
