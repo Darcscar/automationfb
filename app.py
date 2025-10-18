@@ -57,7 +57,7 @@ def load_config():
                 logger.info(f"Configuration loaded from {CONFIG_FILE}")
         else:
             config = {
-                "store_hours": {"open_time": "10:00", "close_time": "22:00", "timezone": "Asia/Manila"},
+                "store_hours": {"open_time": "10:00", "close_time": "21:00", "timezone": "Asia/Manila"},
                 "contact": {"phone_number": "09171505518 / (042)4215968"},
                 "urls": {
                     "foodpanda": "https://www.foodpanda.ph/restaurant/locg/pedros-old-manila-rd",
