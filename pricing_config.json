@@ -31,7 +31,10 @@
     "grill_master": {
       "vietnamese chicken w/ rice": 145,
       "peri peri chicken w/ rice": 155,
-      "grilled liempo w/ rice": 165
+      "grilled liempo w/ rice": 165 
+      "vietnamese chicken ala carte": 120,
+      "peri peri chicken ala carte": 135,
+      "grilled liempo ala carte": 145
     },
     "yangchow_special": {
       "yangchow w/ pork tonkatsu": 145,
@@ -70,9 +73,38 @@
       "samalamig": 25,
       "milky melon": 25
     },
-    "extras": {
-      "rice": 15,
-      "plain rice": 15
+    "chargeable_extras": {
+      "yangchow fried rice": 60,
+      "fried rice": 60,
+      "garlic rice": 30,
+      "hainanese rice": 30,
+      "plain rice": 25,
+      "egg": 15,
+      "fried egg": 15,
+      "scrambled egg": 15,
+      "boiled egg": 15,
+      "eggs": 15,
+      "gravy": 20,
+      "chili oil": 20
+    },
+    "free_requests": {
+      "soy sauce": 0,
+      "kalamansi": 0,
+      "sili": 0,
+      "chili": 0,
+      "vinegar": 0,
+      "salt": 0,
+      "pepper": 0,
+      "extra rice": 0,
+      "more rice": 0,
+      "additional rice": 0,
+      "water": 0,
+      "ice": 0,
+      "napkin": 0,
+      "utensils": 0,
+      "fork": 0,
+      "spoon": 0
     }
   }
 }
+
