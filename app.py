@@ -184,14 +184,22 @@ def calculate_order_total(order_text):
     
     logger.info(f"Loaded {len(all_pricing)} pricing items from config")
     
-    # Count quantities and calculate total
+    # Debug: Log available items for troubleshooting
+    logger.info(f"Available pricing items: {list(all_pricing.keys())}")
+    
+    # Count quantities and calculate total - find ALL matching items
     for item, price in all_pricing.items():
         item_lower = item.lower()
         if item_lower in text_lower:
-            # Try to extract quantity
+            # Try to extract quantity for this specific item
             quantity = 1
+            
+            # Look for quantity words near this item
+            item_position = text_lower.find(item_lower)
+            item_context = text_lower[max(0, item_position-20):item_position+len(item_lower)+20]
+            
             for qty_word in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
-                if qty_word in text_lower:
+                if qty_word in item_context:
                     if qty_word.isdigit():
                         quantity = int(qty_word)
                     elif qty_word == "two":
@@ -225,12 +233,17 @@ def calculate_order_total(order_text):
             if base_name not in base_items or price < base_items[base_name]:
                 base_items[base_name] = price
         
-        # Check if any base item matches the order text
+        # Check if any base item matches the order text - find ALL base items
         for base_item, price in base_items.items():
             if base_item in text_lower:
                 quantity = 1
+                
+                # Look for quantity words near this base item
+                item_position = text_lower.find(base_item)
+                item_context = text_lower[max(0, item_position-20):item_position+len(base_item)+20]
+                
                 for qty_word in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
-                    if qty_word in text_lower:
+                    if qty_word in item_context:
                         if qty_word.isdigit():
                             quantity = int(qty_word)
                         elif qty_word == "two":
@@ -247,7 +260,7 @@ def calculate_order_total(order_text):
                 total += item_total
                 found_items.append(f"{quantity}×{base_item}@{price} (base item)")
                 logger.info(f"Found base item '{base_item}' with quantity {quantity} at ₱{price} each = ₱{item_total}")
-                break  # Only match the first base item found
+                # Continue to find more base items instead of breaking
     
     if found_items:
         logger.info(f"Order breakdown: {', '.join(found_items)}")
@@ -257,6 +270,20 @@ def calculate_order_total(order_text):
         logger.warning("Available items in pricing config:")
         for item in all_pricing.keys():
             logger.warning(f"  - {item}")
+        
+        # Specific debugging for common items
+        logger.warning("Checking for specific items in order text:")
+        for check_item in ["pad kra pao", "tocilog", "peri peri", "peri peri chicken"]:
+            if check_item in text_lower:
+                logger.warning(f"  ✅ Found '{check_item}' in order text")
+                # Check if it exists in pricing config
+                for price_item in all_pricing.keys():
+                    if check_item in price_item.lower():
+                        logger.warning(f"    ✅ Matches pricing item: '{price_item}' = ₱{all_pricing[price_item]}")
+                    else:
+                        logger.warning(f"    ❌ No pricing match for: '{check_item}'")
+            else:
+                logger.warning(f"  ❌ '{check_item}' not found in order text")
     
     return total
 
