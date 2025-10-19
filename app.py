@@ -526,13 +526,14 @@ user_menu_muted_until = {}
 
 # Variation detection and prompting
 def detect_item_variations(order_text):
-    """Detect if an item needs variation selection"""
+    """Detect ALL items that need variation selection in multi-item orders"""
     load_menu_config()
     
     if not menu_config or not menu_config.get("menu_items"):
-        return None, None
+        return []
     
     text_lower = order_text.lower().strip()
+    items_needing_variations = []
     
     # Define base items and their variations based on menu categories
     base_items = {}
@@ -562,20 +563,36 @@ def detect_item_variations(order_text):
             base_items["yangchow"] = ["w/ pork tonkatsu", "w/ sweet & sour pork", "w/ chicken fillet", "w/ general tso chicken", "w/ lechon kawali"]
             break
     
-    # Check for base items in the order text
+    # Check for ALL base items in the order text that need variations
     for base_item, variations in base_items.items():
         if base_item in text_lower:
             # Check if variation is already specified
+            variation_specified = False
             for variation in variations:
                 if variation in text_lower:
-                    return None, None  # Variation already specified
+                    variation_specified = True
+                    break
             
-            # Return base item and available variations
-            return base_item, variations
+            # If no variation specified, add to list of items needing variations
+            if not variation_specified:
+                # Check if we already have a similar base item (avoid duplicates)
+                is_duplicate = False
+                for existing_item in items_needing_variations:
+                    # Check if this base item is contained in an existing one or vice versa
+                    if (base_item in existing_item["base_item"] or 
+                        existing_item["base_item"] in base_item):
+                        is_duplicate = True
+                        break
+                
+                if not is_duplicate:
+                    items_needing_variations.append({
+                        "base_item": base_item,
+                        "variations": variations
+                    })
     
-    return None, None
+    return items_needing_variations
 
-def ask_for_variation(psid, base_item, variations):
+def ask_for_variation(psid, base_item, variations, is_multi_item=False, current_index=0, total_items=0):
     """Ask user to select a variation"""
     if not variations:
         return False
@@ -599,16 +616,28 @@ def ask_for_variation(psid, base_item, variations):
     # Determine size type for better messaging
     if variations == ["small", "double"]:
         size_type = "size"
-        message_text = f"I found '{base_item}' in your order. Please choose a size:\n\n"
+        if is_multi_item:
+            message_text = f"Item {current_index + 1} of {total_items}: I found '{base_item}' in your order. Please choose a size:\n\n"
+        else:
+            message_text = f"I found '{base_item}' in your order. Please choose a size:\n\n"
     elif variations == ["solo", "medium", "large"]:
         size_type = "size"
-        message_text = f"I found '{base_item}' in your order. Please choose a size:\n\n"
+        if is_multi_item:
+            message_text = f"Item {current_index + 1} of {total_items}: I found '{base_item}' in your order. Please choose a size:\n\n"
+        else:
+            message_text = f"I found '{base_item}' in your order. Please choose a size:\n\n"
     elif "w/" in variations[0]:
         size_type = "variation"
-        message_text = f"I found '{base_item}' in your order. Please choose a variation:\n\n"
+        if is_multi_item:
+            message_text = f"Item {current_index + 1} of {total_items}: I found '{base_item}' in your order. Please choose a variation:\n\n"
+        else:
+            message_text = f"I found '{base_item}' in your order. Please choose a variation:\n\n"
     else:
         size_type = "option"
-        message_text = f"I found '{base_item}' in your order. Please choose an option:\n\n"
+        if is_multi_item:
+            message_text = f"Item {current_index + 1} of {total_items}: I found '{base_item}' in your order. Please choose an option:\n\n"
+        else:
+            message_text = f"I found '{base_item}' in your order. Please choose an option:\n\n"
     
     for i, variation in enumerate(variations, 1):
         message_text += f"{i}. {variation.title()}\n"
@@ -621,10 +650,14 @@ def ask_for_variation(psid, base_item, variations):
     return True
 
 def process_variation_selection(psid, payload, original_order_text):
-    """Process user's variation selection"""
+    """Process user's variation selection for multiple items"""
     if payload == "VARIATION_CANCEL":
+        # Clear all variation states
         user_states.pop(psid, None)
         user_states.pop(f"{psid}_original_order", None)
+        user_states.pop(f"{psid}_variation_items", None)
+        user_states.pop(f"{psid}_current_variation_index", None)
+        user_states.pop(f"{psid}_updated_order_text", None)
         return send_message_with_quick_replies(psid, "Order cancelled. How can I help you today?")
     
     if payload.startswith("VARIATION_"):
@@ -634,15 +667,39 @@ def process_variation_selection(psid, payload, original_order_text):
             base_item = parts[1]
             variation = parts[2]
             
+            # Get current state
+            variation_items = user_states.get(f"{psid}_variation_items", [])
+            current_index = user_states.get(f"{psid}_current_variation_index", 0)
+            updated_order_text = user_states.get(f"{psid}_updated_order_text", original_order_text)
+            
             # Update the order text with the selected variation
-            updated_order_text = original_order_text.replace(base_item, f"{base_item} {variation}")
+            updated_order_text = updated_order_text.replace(base_item, f"{base_item} {variation}")
+            user_states[f"{psid}_updated_order_text"] = updated_order_text
             
-            # Clear the variation state
-            user_states.pop(psid, None)
-            user_states.pop(f"{psid}_original_order", None)
+            # Move to next item that needs variation
+            current_index += 1
             
-            # Process the updated order
-            return process_order_with_variation(psid, updated_order_text)
+            if current_index < len(variation_items):
+                # Ask for next variation
+                user_states[f"{psid}_current_variation_index"] = current_index
+                current_item = variation_items[current_index]
+                is_multi_item = len(variation_items) > 1
+                
+                call_send_api(psid, {
+                    "text": f"Great! Now for the next item..."
+                })
+                
+                return ask_for_variation(psid, current_item["base_item"], current_item["variations"], 
+                                       is_multi_item=is_multi_item, current_index=current_index, total_items=len(variation_items))
+            else:
+                # All variations selected, process the final order
+                user_states.pop(psid, None)
+                user_states.pop(f"{psid}_original_order", None)
+                user_states.pop(f"{psid}_variation_items", None)
+                user_states.pop(f"{psid}_current_variation_index", None)
+                user_states.pop(f"{psid}_updated_order_text", None)
+                
+                return process_order_with_variation(psid, updated_order_text)
     
     return False
 
@@ -871,12 +928,19 @@ def handle_payload(psid, payload=None, text_message=None):
             return
         
         # Check if order needs variation selection
-        base_item, variations = detect_item_variations(text_message)
-        if base_item and variations:
-            # Store original order text and ask for variation
+        items_needing_variations = detect_item_variations(text_message)
+        if items_needing_variations:
+            # Store original order text and start variation process
             user_states[psid] = "awaiting_variation"
             user_states[f"{psid}_original_order"] = text_message
-            return ask_for_variation(psid, base_item, variations)
+            user_states[f"{psid}_variation_items"] = items_needing_variations
+            user_states[f"{psid}_current_variation_index"] = 0
+            
+            # Ask for the first variation
+            current_item = items_needing_variations[0]
+            is_multi_item = len(items_needing_variations) > 1
+            return ask_for_variation(psid, current_item["base_item"], current_item["variations"], 
+                                   is_multi_item=is_multi_item, current_index=0, total_items=len(items_needing_variations))
         
         # If valid and no variation needed, process the order
         success, order_number = save_order_to_supabase(psid, text_message)
