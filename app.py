@@ -188,10 +188,14 @@ def calculate_order_total(order_text):
     logger.info(f"Available pricing items: {list(all_pricing.keys())}")
     
     # Count quantities and calculate total - find ALL matching items
-    # Sort items by price (prefer smaller/cheaper items when multiple variations match)
-    sorted_items = sorted(all_pricing.items(), key=lambda x: x[1])
+    # Use a two-pass approach: exact matches first, then flexible matches
     
-    for item, price in sorted_items:
+    # First pass: Look for exact matches (including customer-specified variations)
+    # Sort by length first (longest matches first) to prioritize specific variations
+    sorted_items_by_length = sorted(all_pricing.items(), key=lambda x: len(x[0]), reverse=True)
+    
+    # Process exact matches first (prioritize customer-specified variations)
+    for item, price in sorted_items_by_length:
         item_lower = item.lower()
         
         # Try exact match first
@@ -251,6 +255,36 @@ def calculate_order_total(order_text):
             for variation in [" small", " double", " large", " medium", " solo", " w/ rice", " w/", " with rice", " with"]:
                 base_name = base_name.replace(variation, "")
             
+            # Special handling for yangchow items - check if order contains the protein without "yangchow"
+            if "yangchow" in item_lower and "pork tonkatsu" in item_lower:
+                # Check if order contains just "pork tonkatsu" without "yangchow"
+                if "pork tonkatsu" in text_lower and "yangchow" not in text_lower:
+                    # This is a flexible match for yangchow w/ pork tonkatsu
+                    item_position = text_lower.find("pork tonkatsu")
+                    is_valid_match = True
+                    
+                    # Check if this is a valid match (not a substring within another word)
+                    if item_position > 0:
+                        char_before = text_lower[item_position - 1]
+                        if char_before.isalnum():
+                            is_valid_match = False
+                    
+                    if item_position + len("pork tonkatsu") < len(text_lower):
+                        char_after = text_lower[item_position + len("pork tonkatsu")]
+                        if char_after.isalnum():
+                            is_valid_match = False
+                    
+                    if is_valid_match:
+                        # Check if we already found a match for this item
+                        item_already_found = any("yangchow" in found_item.lower() for found_item in found_items)
+                        if not item_already_found:
+                            quantity = 1
+                            item_total = quantity * price
+                            total += item_total
+                            found_items.append(f"{quantity}×{item}@{price} (yangchow match)")
+                            logger.info(f"Found yangchow item '{item}' for 'pork tonkatsu' with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
+                        continue
+            
             # Also try with "w/" replaced with "with" for matching
             base_name_with = base_name.replace("w/", "with")
             
@@ -290,13 +324,20 @@ def calculate_order_total(order_text):
             if match_found:
                 # Check if we already found a match for this base item (avoid duplicates)
                 base_already_found = False
-                for found_item in found_items:
+                existing_item_to_replace = None
+                
+                for i, found_item in enumerate(found_items):
                     # Extract the item name from the found item string
                     found_item_name = found_item.split('@')[0].lower()
                     
+                    # Remove quantity prefix (e.g., "1×") from found_item_name
+                    found_item_name_clean = found_item_name
+                    if "×" in found_item_name:
+                        found_item_name_clean = found_item_name.split("×", 1)[1]
+                    
                     # Check if this is the same base item by comparing the core item name
                     # Remove size variations from both items and compare
-                    found_base = found_item_name
+                    found_base = found_item_name_clean
                     for variation in [" small", " double", " large", " medium", " solo", " w/ rice", " w/", " with rice", " with"]:
                         found_base = found_base.replace(variation, "")
                     
@@ -306,9 +347,31 @@ def calculate_order_total(order_text):
                     
                     # Check if the base items are the same
                     if current_base == found_base:
-                        base_already_found = True
-                        logger.info(f"Duplicate detected: '{current_base}' already found as '{found_item_name}'")
-                        break
+                        # Check if the current item has a customer-specified variation near this item
+                        customer_specified_variation = None
+                        # Find the position of the matched text for context
+                        item_position = -1
+                        for test_name in [base_name, base_name_with, base_name_normalized]:
+                            if test_name in text_lower:
+                                item_position = text_lower.find(test_name)
+                                break
+                        
+                        if item_position >= 0:
+                            item_context = text_lower[max(0, item_position-20):item_position+len(test_name)+20]
+                            for variation in ["small", "double", "large", "medium", "solo"]:
+                                if variation in item_context:
+                                    customer_specified_variation = variation
+                                    break
+                        
+                        # If customer specified a variation, prioritize that over the existing match
+                        if customer_specified_variation and customer_specified_variation in item_lower:
+                            existing_item_to_replace = i
+                            logger.info(f"Customer specified '{customer_specified_variation}', replacing '{found_item_name}' with '{item}'")
+                            break
+                        else:
+                            base_already_found = True
+                            logger.info(f"Duplicate detected: '{current_base}' already found as '{found_item_name}' - skipping '{item}'")
+                            break
                 
                 if not base_already_found:
                     # Find the actual position of the matched text for quantity extraction
@@ -342,6 +405,42 @@ def calculate_order_total(order_text):
                     total += item_total
                     found_items.append(f"{quantity}×{item}@{price} (flexible match)")
                     logger.info(f"Found item '{item}' (base: '{base_name}') with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
+                elif existing_item_to_replace is not None:
+                    # Replace the existing item with the customer-specified variation
+                    old_item = found_items[existing_item_to_replace]
+                    old_price = int(old_item.split('@')[1].split(' ')[0])
+                    
+                    # Find the actual position of the matched text for quantity extraction
+                    item_position = -1
+                    for test_name in [base_name, base_name_with, base_name_normalized]:
+                        if test_name in text_lower:
+                            item_position = text_lower.find(test_name)
+                            break
+                    
+                    # Try to extract quantity for this specific item
+                    quantity = 1
+                    
+                    # Look for quantity words near this item
+                    item_context = text_lower[max(0, item_position-20):item_position+len(test_name)+20]
+                    
+                    for qty_word in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
+                        if qty_word in item_context:
+                            if qty_word.isdigit():
+                                quantity = int(qty_word)
+                            elif qty_word == "two":
+                                quantity = 2
+                            elif qty_word == "three":
+                                quantity = 3
+                            elif qty_word == "four":
+                                quantity = 4
+                            elif qty_word == "five":
+                                quantity = 5
+                            break
+                    
+                    item_total = quantity * price
+                    total = total - old_price + item_total  # Adjust total
+                    found_items[existing_item_to_replace] = f"{quantity}×{item}@{price} (flexible match - replaced)"
+                    logger.info(f"Replaced '{old_item}' with '{item}' (base: '{base_name}') with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
                 else:
                     logger.info(f"Skipping '{item}' - base item already found")
     
