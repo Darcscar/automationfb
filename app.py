@@ -172,6 +172,9 @@ def calculate_order_total(order_text):
     
     text_lower = order_text.lower().strip()
     total = 0
+    found_items = []
+    
+    logger.info(f"Calculating total for order: '{order_text}'")
     
     # Get all pricing from the external file (excluding free requests)
     all_pricing = {}
@@ -179,9 +182,12 @@ def calculate_order_total(order_text):
         if category != "free_requests":  # Skip free requests from pricing
             all_pricing.update(items)
     
+    logger.info(f"Loaded {len(all_pricing)} pricing items from config")
+    
     # Count quantities and calculate total
     for item, price in all_pricing.items():
-        if item in text_lower:
+        item_lower = item.lower()
+        if item_lower in text_lower:
             # Try to extract quantity
             quantity = 1
             for qty_word in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
@@ -198,10 +204,20 @@ def calculate_order_total(order_text):
                         quantity = 5
                     break
             
-            total += quantity * price
-            logger.info(f"Found item '{item}' with quantity {quantity} at ₱{price} each = ₱{quantity * price}")
+            item_total = quantity * price
+            total += item_total
+            found_items.append(f"{quantity}×{item}@{price}")
+            logger.info(f"Found item '{item}' with quantity {quantity} at ₱{price} each = ₱{item_total}")
     
-    logger.info(f"Total calculated: ₱{total}")
+    if found_items:
+        logger.info(f"Order breakdown: {', '.join(found_items)}")
+        logger.info(f"Total calculated: ₱{total}")
+    else:
+        logger.warning(f"No matching items found for order: '{order_text}'")
+        logger.warning("Available items in pricing config:")
+        for item in all_pricing.keys():
+            logger.warning(f"  - {item}")
+    
     return total
 
 def validate_order_text(text):
@@ -356,7 +372,7 @@ def get_manila_time():
 
 def get_store_hours():
     open_str = get_config_value('store_hours.open_time', '10:00')
-    close_str = get_config_value('store_hours.close_time', '21:00')
+    close_str = get_config_value('store_hours.close_time', '22:00')
     open_parts = open_str.split(':')
     close_parts = close_str.split(':')
     open_time = time(int(open_parts[0]), int(open_parts[1]))
