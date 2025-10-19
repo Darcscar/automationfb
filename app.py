@@ -320,14 +320,14 @@ def detect_item_variations(order_text):
     # Define base items and their variations based on menu categories
     base_items = {}
     
-    # Stir fry items (solo/double)
+    # Stir fry items (small/double) - matching pricing config
     stir_fry_items = menu_config.get("menu_items", {}).get("stir_fry", [])
     for item in stir_fry_items:
         # Extract base item name (remove common variations)
         base_name = item
-        for variation in [" solo", " double", " large", " medium"]:
+        for variation in [" small", " double", " large", " medium", " solo"]:
             base_name = base_name.replace(variation, "")
-        base_items[base_name] = ["solo", "double"]
+        base_items[base_name] = ["small", "double"]
     
     # Short order items (solo/medium/large)
     short_order_items = menu_config.get("menu_items", {}).get("short_order", [])
@@ -380,7 +380,7 @@ def ask_for_variation(psid, base_item, variations):
     })
     
     # Determine size type for better messaging
-    if variations == ["solo", "double"]:
+    if variations == ["small", "double"]:
         size_type = "size"
         message_text = f"I found '{base_item}' in your order. Please choose a size:\n\n"
     elif variations == ["solo", "medium", "large"]:
@@ -484,12 +484,12 @@ def save_order_to_supabase(psid, order_text):
             "order_number": order_number,
             "facebook_psid": psid,
             "order_text": order_text,  # Original customer text
-            "complete_menu_name": complete_menu_name,  # Complete menu name for POS
+            "complete_menu_name": complete_menu_name,  # Complete menu name for POS (NOT customer name)
             "order_type": "pickup",
             "status": "pending",
             "order_date": now.isoformat(),
             "estimated_total": estimated_total,
-            "customer_name": f"Facebook Customer {psid[-4:]}"
+            "customer_name": f"Facebook Customer {psid[-4:]}"  # Customer name (separate from menu name)
         }
         
         response = requests.post(url, headers=headers, json=payload, timeout=15)
