@@ -187,57 +187,57 @@ def calculate_order_total(order_text):
     # Debug: Log available items for troubleshooting
     logger.info(f"Available pricing items: {list(all_pricing.keys())}")
     
-            # Count quantities and calculate total - find ALL matching items
-            for item, price in all_pricing.items():
-                item_lower = item.lower()
-                if item_lower in text_lower:
-                    # Check if this is a valid match (not a substring within another word)
-                    item_position = text_lower.find(item_lower)
-                    
-                    # Check if the match is a complete word (not part of another word)
-                    is_valid_match = True
-                    
-                    # Check character before the match
-                    if item_position > 0:
-                        char_before = text_lower[item_position - 1]
-                        if char_before.isalnum():
-                            is_valid_match = False
-                    
-                    # Check character after the match
-                    if item_position + len(item_lower) < len(text_lower):
-                        char_after = text_lower[item_position + len(item_lower)]
-                        if char_after.isalnum():
-                            is_valid_match = False
-                    
-                    # Skip if not a valid word match
-                    if not is_valid_match:
-                        logger.info(f"Skipping '{item}' - found as substring in another word")
-                        continue
-                    
-                    # Try to extract quantity for this specific item
-                    quantity = 1
-                    
-                    # Look for quantity words near this item
-                    item_context = text_lower[max(0, item_position-20):item_position+len(item_lower)+20]
-                    
-                    for qty_word in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
-                        if qty_word in item_context:
-                            if qty_word.isdigit():
-                                quantity = int(qty_word)
-                            elif qty_word == "two":
-                                quantity = 2
-                            elif qty_word == "three":
-                                quantity = 3
-                            elif qty_word == "four":
-                                quantity = 4
-                            elif qty_word == "five":
-                                quantity = 5
-                            break
-                    
-                    item_total = quantity * price
-                    total += item_total
-                    found_items.append(f"{quantity}×{item}@{price}")
-                    logger.info(f"Found item '{item}' with quantity {quantity} at ₱{price} each = ₱{item_total}")
+    # Count quantities and calculate total - find ALL matching items
+    for item, price in all_pricing.items():
+        item_lower = item.lower()
+        if item_lower in text_lower:
+            # Check if this is a valid match (not a substring within another word)
+            item_position = text_lower.find(item_lower)
+            
+            # Check if the match is a complete word (not part of another word)
+            is_valid_match = True
+            
+            # Check character before the match
+            if item_position > 0:
+                char_before = text_lower[item_position - 1]
+                if char_before.isalnum():
+                    is_valid_match = False
+            
+            # Check character after the match
+            if item_position + len(item_lower) < len(text_lower):
+                char_after = text_lower[item_position + len(item_lower)]
+                if char_after.isalnum():
+                    is_valid_match = False
+            
+            # Skip if not a valid word match
+            if not is_valid_match:
+                logger.info(f"Skipping '{item}' - found as substring in another word")
+                continue
+            
+            # Try to extract quantity for this specific item
+            quantity = 1
+            
+            # Look for quantity words near this item
+            item_context = text_lower[max(0, item_position-20):item_position+len(item_lower)+20]
+            
+            for qty_word in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
+                if qty_word in item_context:
+                    if qty_word.isdigit():
+                        quantity = int(qty_word)
+                    elif qty_word == "two":
+                        quantity = 2
+                    elif qty_word == "three":
+                        quantity = 3
+                    elif qty_word == "four":
+                        quantity = 4
+                    elif qty_word == "five":
+                        quantity = 5
+                    break
+            
+            item_total = quantity * price
+            total += item_total
+            found_items.append(f"{quantity}×{item}@{price}")
+            logger.info(f"Found item '{item}' with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
     
     # If no exact match found, try to find base item without size variations
     if not found_items:
