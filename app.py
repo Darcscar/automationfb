@@ -293,12 +293,21 @@ def calculate_order_total(order_text):
                 for found_item in found_items:
                     # Extract the item name from the found item string
                     found_item_name = found_item.split('@')[0].lower()
-                    # Check if any of our test names match the found item's base name
-                    for test_name in [base_name, base_name_with, base_name_normalized]:
-                        if test_name in found_item_name:
-                            base_already_found = True
-                            break
-                    if base_already_found:
+                    
+                    # Check if this is the same base item by comparing the core item name
+                    # Remove size variations from both items and compare
+                    found_base = found_item_name
+                    for variation in [" small", " double", " large", " medium", " solo", " w/ rice", " w/", " with rice", " with"]:
+                        found_base = found_base.replace(variation, "")
+                    
+                    current_base = base_name
+                    for variation in [" small", " double", " large", " medium", " solo", " w/ rice", " w/", " with rice", " with"]:
+                        current_base = current_base.replace(variation, "")
+                    
+                    # Check if the base items are the same
+                    if current_base == found_base:
+                        base_already_found = True
+                        logger.info(f"Duplicate detected: '{current_base}' already found as '{found_item_name}'")
                         break
                 
                 if not base_already_found:
@@ -992,4 +1001,3 @@ if __name__ == "__main__":
     PORT = int(os.getenv("PORT", 10000))
     logger.info(f"Starting Flask app on port {PORT}...")
     app.run(host="0.0.0.0", port=PORT, debug=True)
-
