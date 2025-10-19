@@ -547,14 +547,22 @@ def detect_item_variations(order_text):
             base_name = base_name.replace(variation, "")
         base_items[base_name] = ["small", "double"]
     
-    # Short order items (solo/medium/large)
+    # Add specific base items for items that might be detected as shorter versions
+    # This ensures "chicken w/ mushroom" is detected properly, not just "mushroom"
+    specific_base_items = {
+        "chicken w/ mushroom": ["small", "double"],
+        "chicken with mushroom": ["small", "double"]
+    }
+    base_items.update(specific_base_items)
+    
+    # Short order items (solo/large) - matching pricing config
     short_order_items = menu_config.get("menu_items", {}).get("short_order", [])
     for item in short_order_items:
         # Extract base item name
         base_name = item
-        for variation in [" solo", " medium", " large"]:
+        for variation in [" solo", " large"]:  # Only solo and large, no medium
             base_name = base_name.replace(variation, "")
-        base_items[base_name] = ["solo", "medium", "large"]
+        base_items[base_name] = ["solo", "large"]
     
     # Yangchow special items
     yangchow_items = menu_config.get("menu_items", {}).get("yangchow", [])
@@ -564,7 +572,10 @@ def detect_item_variations(order_text):
             break
     
     # Check for ALL base items in the order text that need variations
-    for base_item, variations in base_items.items():
+    # Sort by length (longest first) to prioritize more specific matches
+    sorted_base_items = sorted(base_items.items(), key=lambda x: len(x[0]), reverse=True)
+    
+    for base_item, variations in sorted_base_items:
         if base_item in text_lower:
             # Check if variation is already specified
             variation_specified = False
@@ -576,11 +587,12 @@ def detect_item_variations(order_text):
             # If no variation specified, add to list of items needing variations
             if not variation_specified:
                 # Check if we already have a similar base item (avoid duplicates)
+                # Since we're processing in length order (longest first), 
+                # we should skip items that are already covered by longer matches
                 is_duplicate = False
                 for existing_item in items_needing_variations:
-                    # Check if this base item is contained in an existing one or vice versa
-                    if (base_item in existing_item["base_item"] or 
-                        existing_item["base_item"] in base_item):
+                    # If the current base item is contained in an existing one, skip it
+                    if base_item in existing_item["base_item"]:
                         is_duplicate = True
                         break
                 
