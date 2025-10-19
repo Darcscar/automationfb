@@ -209,6 +209,46 @@ def calculate_order_total(order_text):
             found_items.append(f"{quantity}×{item}@{price}")
             logger.info(f"Found item '{item}' with quantity {quantity} at ₱{price} each = ₱{item_total}")
     
+    # If no exact match found, try to find base item without size variations
+    if not found_items:
+        logger.info("No exact matches found, trying base item matching...")
+        
+        # Extract base item names (remove size variations)
+        base_items = {}
+        for item, price in all_pricing.items():
+            base_name = item.lower()
+            # Remove size variations
+            for variation in [" small", " double", " large", " medium", " solo"]:
+                base_name = base_name.replace(variation, "")
+            
+            # Store the lowest price for each base item
+            if base_name not in base_items or price < base_items[base_name]:
+                base_items[base_name] = price
+        
+        # Check if any base item matches the order text
+        for base_item, price in base_items.items():
+            if base_item in text_lower:
+                quantity = 1
+                for qty_word in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
+                    if qty_word in text_lower:
+                        if qty_word.isdigit():
+                            quantity = int(qty_word)
+                        elif qty_word == "two":
+                            quantity = 2
+                        elif qty_word == "three":
+                            quantity = 3
+                        elif qty_word == "four":
+                            quantity = 4
+                        elif qty_word == "five":
+                            quantity = 5
+                        break
+                
+                item_total = quantity * price
+                total += item_total
+                found_items.append(f"{quantity}×{base_item}@{price} (base item)")
+                logger.info(f"Found base item '{base_item}' with quantity {quantity} at ₱{price} each = ₱{item_total}")
+                break  # Only match the first base item found
+    
     if found_items:
         logger.info(f"Order breakdown: {', '.join(found_items)}")
         logger.info(f"Total calculated: ₱{total}")
