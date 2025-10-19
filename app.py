@@ -255,35 +255,66 @@ def calculate_order_total(order_text):
             for variation in [" small", " double", " large", " medium", " solo", " w/ rice", " w/", " with rice", " with"]:
                 base_name = base_name.replace(variation, "")
             
-            # Special handling for yangchow items - check if order contains the protein without "yangchow"
-            if "yangchow" in item_lower and "pork tonkatsu" in item_lower:
-                # Check if order contains just "pork tonkatsu" without "yangchow"
-                if "pork tonkatsu" in text_lower and "yangchow" not in text_lower:
-                    # This is a flexible match for yangchow w/ pork tonkatsu
-                    item_position = text_lower.find("pork tonkatsu")
-                    is_valid_match = True
-                    
-                    # Check if this is a valid match (not a substring within another word)
-                    if item_position > 0:
-                        char_before = text_lower[item_position - 1]
-                        if char_before.isalnum():
-                            is_valid_match = False
-                    
-                    if item_position + len("pork tonkatsu") < len(text_lower):
-                        char_after = text_lower[item_position + len("pork tonkatsu")]
-                        if char_after.isalnum():
-                            is_valid_match = False
-                    
-                    if is_valid_match:
-                        # Check if we already found a match for this item
-                        item_already_found = any("yangchow" in found_item.lower() for found_item in found_items)
-                        if not item_already_found:
-                            quantity = 1
-                            item_total = quantity * price
-                            total += item_total
-                            found_items.append(f"{quantity}×{item}@{price} (yangchow match)")
-                            logger.info(f"Found yangchow item '{item}' for 'pork tonkatsu' with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
-                        continue
+            # Special handling for yangchow items - check if order contains the protein
+            if "yangchow" in item_lower:
+                # Check if order contains the protein (with or without "yangchow")
+                yangchow_proteins = ["pork tonkatsu", "sweet & sour pork", "chicken fillet", "general tso chicken", "lechon kawali"]
+                for protein in yangchow_proteins:
+                    if protein in item_lower:
+                        # Check if this protein is mentioned in the order
+                        if protein in text_lower:
+                            # This is a flexible match for yangchow w/ [protein]
+                            item_position = text_lower.find(protein)
+                            is_valid_match = True
+                            
+                            # Check if this is a valid match (not a substring within another word)
+                            if item_position > 0:
+                                char_before = text_lower[item_position - 1]
+                                if char_before.isalnum():
+                                    is_valid_match = False
+                            
+                            if item_position + len(protein) < len(text_lower):
+                                char_after = text_lower[item_position + len(protein)]
+                                if char_after.isalnum():
+                                    is_valid_match = False
+                            
+                            if is_valid_match:
+                                # Check if we already found a match for this item
+                                item_already_found = any("yangchow" in found_item.lower() for found_item in found_items)
+                                if not item_already_found:
+                                    quantity = 1
+                                    item_total = quantity * price
+                                    total += item_total
+                                    found_items.append(f"{quantity}×{item}@{price} (yangchow match)")
+                                    logger.info(f"Found yangchow item '{item}' for '{protein}' with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
+                                break
+                continue
+            
+            # Special handling for "spicy pork ribs" -> "sweet and spicy pork ribs"
+            if "spicy pork ribs" in text_lower and "sweet and spicy pork ribs" in item_lower:
+                item_position = text_lower.find("spicy pork ribs")
+                is_valid_match = True
+                
+                if item_position > 0:
+                    char_before = text_lower[item_position - 1]
+                    if char_before.isalnum():
+                        is_valid_match = False
+                
+                if item_position + len("spicy pork ribs") < len(text_lower):
+                    char_after = text_lower[item_position + len("spicy pork ribs")]
+                    if char_after.isalnum():
+                        is_valid_match = False
+                
+                if is_valid_match:
+                    # Check if we already found a match for this item
+                    item_already_found = any("spicy pork ribs" in found_item.lower() for found_item in found_items)
+                    if not item_already_found:
+                        quantity = 1
+                        item_total = quantity * price
+                        total += item_total
+                        found_items.append(f"{quantity}×{item}@{price} (spicy pork ribs match)")
+                        logger.info(f"Found spicy pork ribs item '{item}' for 'spicy pork ribs' with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
+                continue
             
             # Also try with "w/" replaced with "with" for matching
             base_name_with = base_name.replace("w/", "with")
