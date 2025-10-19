@@ -188,8 +188,13 @@ def calculate_order_total(order_text):
     logger.info(f"Available pricing items: {list(all_pricing.keys())}")
     
     # Count quantities and calculate total - find ALL matching items
-    for item, price in all_pricing.items():
+    # Sort items by price (prefer smaller/cheaper items when multiple variations match)
+    sorted_items = sorted(all_pricing.items(), key=lambda x: x[1])
+    
+    for item, price in sorted_items:
         item_lower = item.lower()
+        
+        # Try exact match first
         if item_lower in text_lower:
             # Check if this is a valid match (not a substring within another word)
             item_position = text_lower.find(item_lower)
@@ -238,8 +243,100 @@ def calculate_order_total(order_text):
             total += item_total
             found_items.append(f"{quantity}×{item}@{price}")
             logger.info(f"Found item '{item}' with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
+        
+        # Try flexible matching for items with size variations
+        else:
+            # Extract base item name (remove size variations and common variations)
+            base_name = item_lower
+            for variation in [" small", " double", " large", " medium", " solo", " w/ rice", " w/", " with rice", " with"]:
+                base_name = base_name.replace(variation, "")
+            
+            # Also try with "w/" replaced with "with" for matching
+            base_name_with = base_name.replace("w/", "with")
+            
+            # Also try with spaces around "w/" normalized
+            base_name_normalized = item_lower
+            for variation in [" small", " double", " large", " medium", " solo", " w/ rice", " with rice"]:
+                base_name_normalized = base_name_normalized.replace(variation, "")
+            # Replace "w/" with "with" but keep the space structure
+            base_name_normalized = base_name_normalized.replace(" w/", " with")
+            
+            # Try all versions for matching
+            match_found = False
+            for test_name in [base_name, base_name_with, base_name_normalized]:
+                if test_name in text_lower:
+                    # Check if this is a valid match (not a substring within another word)
+                    item_position = text_lower.find(test_name)
+                    
+                    # Check if the match is a complete word (not part of another word)
+                    is_valid_match = True
+                    
+                    # Check character before the match
+                    if item_position > 0:
+                        char_before = text_lower[item_position - 1]
+                        if char_before.isalnum():
+                            is_valid_match = False
+                    
+                    # Check character after the match
+                    if item_position + len(test_name) < len(text_lower):
+                        char_after = text_lower[item_position + len(test_name)]
+                        if char_after.isalnum():
+                            is_valid_match = False
+                    
+                    if is_valid_match:
+                        match_found = True
+                        break
+            
+            if match_found:
+                # Check if we already found a match for this base item (avoid duplicates)
+                base_already_found = False
+                for found_item in found_items:
+                    # Extract the item name from the found item string
+                    found_item_name = found_item.split('@')[0].lower()
+                    # Check if any of our test names match the found item's base name
+                    for test_name in [base_name, base_name_with, base_name_normalized]:
+                        if test_name in found_item_name:
+                            base_already_found = True
+                            break
+                    if base_already_found:
+                        break
+                
+                if not base_already_found:
+                    # Find the actual position of the matched text for quantity extraction
+                    item_position = -1
+                    for test_name in [base_name, base_name_with, base_name_normalized]:
+                        if test_name in text_lower:
+                            item_position = text_lower.find(test_name)
+                            break
+                    
+                    # Try to extract quantity for this specific item
+                    quantity = 1
+                    
+                    # Look for quantity words near this item
+                    item_context = text_lower[max(0, item_position-20):item_position+len(test_name)+20]
+                    
+                    for qty_word in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
+                        if qty_word in item_context:
+                            if qty_word.isdigit():
+                                quantity = int(qty_word)
+                            elif qty_word == "two":
+                                quantity = 2
+                            elif qty_word == "three":
+                                quantity = 3
+                            elif qty_word == "four":
+                                quantity = 4
+                            elif qty_word == "five":
+                                quantity = 5
+                            break
+                    
+                    item_total = quantity * price
+                    total += item_total
+                    found_items.append(f"{quantity}×{item}@{price} (flexible match)")
+                    logger.info(f"Found item '{item}' (base: '{base_name}') with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
+                else:
+                    logger.info(f"Skipping '{item}' - base item already found")
     
-    # If no exact match found, try to find base item without size variations
+    # If no exact matches found, try to find base item without size variations
     if not found_items:
         logger.info("No exact matches found, trying base item matching...")
         
@@ -895,3 +992,4 @@ if __name__ == "__main__":
     PORT = int(os.getenv("PORT", 10000))
     logger.info(f"Starting Flask app on port {PORT}...")
     app.run(host="0.0.0.0", port=PORT, debug=True)
+
