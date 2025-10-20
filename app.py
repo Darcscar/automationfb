@@ -1,38 +1,22 @@
-"""
-FINAL WORKING VERSION - Facebook Bot for Pedro's Restaurant
-FIXED VERSION - Now includes complete_menu_name for proper sales reporting
-"""
-
-import os
-import json
-import logging
-from flask import Flask, request, Response
-try:
-    from flask_cors import CORS
-    CORS_AVAILABLE = True
-except ImportError:
-    CORS_AVAILABLE = False
-    print("Warning: flask-cors not available, CORS disabled")
-import requests
-from datetime import datetime, time, date, timedelta
-from zoneinfo import ZoneInfo
-
-app = Flask(__name__)
-if CORS_AVAILABLE:
-    CORS(app)  # Enable CORS for all routes
-
-# Logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("FBBot")
-
-# Tokens
-PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "EAHJTYAULctYBPozkAuQsRvMfnqGRaz1kprNm3wxmF9gZA4hx9LtWaSZClpnk9fiDGQ4uSe0Fwv7GCGyJN8G4yVvs7UZAASRL4mhBOy6nqwhe2OZA9ovZC7ACU3JdOF4hag9JTmhLVKuK7nVcZAcj6QZAwpnG437jtXLeL6K6xREI04ZB8L2f06rrbaCSiKXmalbTUCuEZCN4ArgZDZD")
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "123darcscar")
-FB_GRAPH = "https://graph.facebook.com/v19.0"
-
-# Supabase Configuration
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://tgawpkpcfrxobgrsysic.supabase.co")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnYXdwa3BjZnJ4b2JncnN5c2ljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM1ODI5NjQsImV4cCI6MjA2OTE1ODk2NH0.AsNuusVkPzozfCB6QTyLy5cnQUgwmXsjNhNH3hb75Ew")
+            # Special handling for "spicy pork strips" - prevent duplicate matching
+            if "spicy pork strips" in text_lower and "spicy pork strips" in item_lower:
+                # Check if we already found a match for this item
+                item_already_found = any("spicy pork strips" in parsed_item["name"].lower() for parsed_item in parsed_items)
+                if item_already_found:
+                    logger.info(f"Skipping '{item}' - spicy pork strips already found")
+                    continue
+                
+                # Check if customer specified a size variation
+                customer_specified_size = None
+                if "small" in text_lower:
+                    customer_specified_size = "small"
+                elif "double" in text_lower:
+                    customer_specified_size = "double"
+                
+                # If customer specified a size, only match that size
+                if customer_specified_size and customer_specified_size not in item_lower:
+                    logger.info(f"Skipping '{item}' - customer specified '{customer_specified_size}' but item is '{item_lower}'")
+                    continue= os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnYXdwa3BjZnJ4b2JncnN5c2ljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM1ODI5NjQsImV4cCI6MjA2OTE1ODk2NH0.AsNuusVkPzozfCB6QTyLy5cnQUgwmXsjNhNH3hb75Ew")
 
 # Configuration
 CONFIG_FILE = "config.json"
@@ -165,19 +149,18 @@ def get_complete_menu_name(order_text):
     
     return best_match if best_match else order_text
 
-def calculate_order_total(order_text):
-    """Calculate estimated total for Facebook orders based on menu items"""
+def parse_order_items(order_text):
+    """Parse order text and return individual items with their details"""
     load_pricing_config()
     
     if not pricing_config or not pricing_config.get("pricing"):
-        logger.warning("No pricing configuration found, returning 0")
-        return 0
+        logger.warning("No pricing configuration found, returning empty list")
+        return []
     
     text_lower = order_text.lower().strip()
-    total = 0
-    found_items = []
+    parsed_items = []
     
-    logger.info(f"Calculating total for order: '{order_text}'")
+    logger.info(f"Parsing order items for: '{order_text}'")
     
     # Get all pricing from the external file (excluding free requests)
     all_pricing = {}
@@ -186,9 +169,6 @@ def calculate_order_total(order_text):
             all_pricing.update(items)
     
     logger.info(f"Loaded {len(all_pricing)} pricing items from config")
-    
-    # Debug: Log available items for troubleshooting
-    logger.info(f"Available pricing items: {list(all_pricing.keys())}")
     
     # Count quantities and calculate total - find ALL matching items
     # Use a two-pass approach: exact matches first, then flexible matches
@@ -246,10 +226,13 @@ def calculate_order_total(order_text):
                         quantity = 5
                     break
             
-            item_total = quantity * price
-            total += item_total
-            found_items.append(f"{quantity}×{item}@{price}")
-            logger.info(f"Found item '{item}' with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
+            parsed_items.append({
+                "name": item,
+                "quantity": quantity,
+                "price": price,
+                "total": quantity * price
+            })
+            logger.info(f"Found item '{item}' with quantity {quantity} at ₱{price} each = ₱{quantity * price}")
         
         # Try flexible matching for items with size variations
         else:
@@ -283,13 +266,15 @@ def calculate_order_total(order_text):
                             
                             if is_valid_match:
                                 # Check if we already found a match for this item
-                                item_already_found = any("yangchow" in found_item.lower() for found_item in found_items)
+                                item_already_found = any("yangchow" in parsed_item["name"].lower() for parsed_item in parsed_items)
                                 if not item_already_found:
-                                    quantity = 1
-                                    item_total = quantity * price
-                                    total += item_total
-                                    found_items.append(f"{quantity}×{item}@{price} (yangchow match)")
-                                    logger.info(f"Found yangchow item '{item}' for '{protein}' with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
+                                    parsed_items.append({
+                                        "name": item,
+                                        "quantity": 1,
+                                        "price": price,
+                                        "total": price
+                                    })
+                                    logger.info(f"Found yangchow item '{item}' for '{protein}' with quantity 1 at ₱{price}")
                                 break
                 continue
             
@@ -310,13 +295,15 @@ def calculate_order_total(order_text):
                 
                 if is_valid_match:
                     # Check if we already found a match for this item
-                    item_already_found = any("peri peri chicken" in found_item.lower() for found_item in found_items)
+                    item_already_found = any("peri peri chicken" in parsed_item["name"].lower() for parsed_item in parsed_items)
                     if not item_already_found:
-                        quantity = 1
-                        item_total = quantity * price
-                        total += item_total
-                        found_items.append(f"{quantity}×{item}@{price} (peri peri match)")
-                        logger.info(f"Found peri peri chicken item '{item}' for 'peri peri chicken' with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
+                        parsed_items.append({
+                            "name": item,
+                            "quantity": 1,
+                            "price": price,
+                            "total": price
+                        })
+                        logger.info(f"Found peri peri chicken item '{item}' for 'peri peri chicken' with quantity 1 at ₱{price}")
                 continue
             
             # Special handling for "spicy pork ribs" -> "sweet and spicy pork ribs"
@@ -336,14 +323,36 @@ def calculate_order_total(order_text):
                 
                 if is_valid_match:
                     # Check if we already found a match for this item
-                    item_already_found = any("spicy pork ribs" in found_item.lower() for found_item in found_items)
+                    item_already_found = any("spicy pork ribs" in parsed_item["name"].lower() for parsed_item in parsed_items)
                     if not item_already_found:
-                        quantity = 1
-                        item_total = quantity * price
-                        total += item_total
-                        found_items.append(f"{quantity}×{item}@{price} (spicy pork ribs match)")
-                        logger.info(f"Found spicy pork ribs item '{item}' for 'spicy pork ribs' with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
+                        parsed_items.append({
+                            "name": item,
+                            "quantity": 1,
+                            "price": price,
+                            "total": price
+                        })
+                        logger.info(f"Found spicy pork ribs item '{item}' for 'spicy pork ribs' with quantity 1 at ₱{price}")
                 continue
+            
+            # Special handling for "spicy pork strips" - prevent duplicate matching
+            if "spicy pork strips" in text_lower and "spicy pork strips" in item_lower:
+                # Check if we already found a match for this item
+                item_already_found = any("spicy pork strips" in parsed_item["name"].lower() for parsed_item in parsed_items)
+                if item_already_found:
+                    logger.info(f"Skipping '{item}' - spicy pork strips already found")
+                    continue
+                
+                # Check if customer specified a size variation
+                customer_specified_size = None
+                if "small" in text_lower:
+                    customer_specified_size = "small"
+                elif "double" in text_lower:
+                    customer_specified_size = "double"
+                
+                # If customer specified a size, only match that size
+                if customer_specified_size and customer_specified_size not in item_lower:
+                    logger.info(f"Skipping '{item}' - customer specified '{customer_specified_size}' but item is '{item_lower}'")
+                    continue
             
             # Also try with "w/" replaced with "with" for matching
             base_name_with = base_name.replace("w/", "with")
@@ -386,18 +395,13 @@ def calculate_order_total(order_text):
                 base_already_found = False
                 existing_item_to_replace = None
                 
-                for i, found_item in enumerate(found_items):
-                    # Extract the item name from the found item string
-                    found_item_name = found_item.split('@')[0].lower()
-                    
-                    # Remove quantity prefix (e.g., "1×") from found_item_name
-                    found_item_name_clean = found_item_name
-                    if "×" in found_item_name:
-                        found_item_name_clean = found_item_name.split("×", 1)[1]
+                for i, parsed_item in enumerate(parsed_items):
+                    # Extract the item name from the parsed item
+                    found_item_name = parsed_item["name"].lower()
                     
                     # Check if this is the same base item by comparing the core item name
                     # Remove size variations from both items and compare
-                    found_base = found_item_name_clean
+                    found_base = found_item_name
                     for variation in [" small", " double", " large", " medium", " solo", " w/ rice", " w/", " with rice", " with"]:
                         found_base = found_base.replace(variation, "")
                     
@@ -461,14 +465,16 @@ def calculate_order_total(order_text):
                                 quantity = 5
                             break
                     
-                    item_total = quantity * price
-                    total += item_total
-                    found_items.append(f"{quantity}×{item}@{price} (flexible match)")
-                    logger.info(f"Found item '{item}' (base: '{base_name}') with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
+                    parsed_items.append({
+                        "name": item,
+                        "quantity": quantity,
+                        "price": price,
+                        "total": quantity * price
+                    })
+                    logger.info(f"Found item '{item}' (base: '{base_name}') with quantity {quantity} at ₱{price} each = ₱{quantity * price}")
                 elif existing_item_to_replace is not None:
                     # Replace the existing item with the customer-specified variation
-                    old_item = found_items[existing_item_to_replace]
-                    old_price = int(old_item.split('@')[1].split(' ')[0])
+                    old_item = parsed_items[existing_item_to_replace]
                     
                     # Find the actual position of the matched text for quantity extraction
                     item_position = -1
@@ -497,15 +503,18 @@ def calculate_order_total(order_text):
                                 quantity = 5
                             break
                     
-                    item_total = quantity * price
-                    total = total - old_price + item_total  # Adjust total
-                    found_items[existing_item_to_replace] = f"{quantity}×{item}@{price} (flexible match - replaced)"
-                    logger.info(f"Replaced '{old_item}' with '{item}' (base: '{base_name}') with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
+                    parsed_items[existing_item_to_replace] = {
+                        "name": item,
+                        "quantity": quantity,
+                        "price": price,
+                        "total": quantity * price
+                    }
+                    logger.info(f"Replaced '{old_item['name']}' with '{item}' (base: '{base_name}') with quantity {quantity} at ₱{price} each = ₱{quantity * price}")
                 else:
                     logger.info(f"Skipping '{item}' - base item already found")
     
     # If no exact matches found, try to find base item without size variations
-    if not found_items:
+    if not parsed_items:
         logger.info("No exact matches found, trying base item matching...")
         
         # Extract base item names (remove size variations)
@@ -565,36 +574,32 @@ def calculate_order_total(order_text):
                             quantity = 5
                         break
                 
-                item_total = quantity * price
-                total += item_total
-                found_items.append(f"{quantity}×{base_item}@{price} (base item)")
-                logger.info(f"Found base item '{base_item}' with quantity {quantity} at ₱{price} each = ₱{item_total}")
+                parsed_items.append({
+                    "name": base_item,
+                    "quantity": quantity,
+                    "price": price,
+                    "total": quantity * price
+                })
+                logger.info(f"Found base item '{base_item}' with quantity {quantity} at ₱{price} each = ₱{quantity * price}")
                 # Continue to find more base items instead of breaking
     
-    if found_items:
-        logger.info(f"Order breakdown: {', '.join(found_items)}")
+    if parsed_items:
+        total = sum(item["total"] for item in parsed_items)
+        breakdown_items = [f"{item['quantity']}×{item['name']}@{item['price']}" for item in parsed_items]
+        logger.info(f"Order breakdown: {', '.join(breakdown_items)}")
         logger.info(f"Total calculated: ₱{total}")
     else:
         logger.warning(f"No matching items found for order: '{order_text}'")
         logger.warning("Available items in pricing config:")
         for item in all_pricing.keys():
             logger.warning(f"  - {item}")
-        
-        # Specific debugging for common items
-        logger.warning("Checking for specific items in order text:")
-        for check_item in ["pad kra pao", "tocilog", "peri peri", "peri peri chicken"]:
-            if check_item in text_lower:
-                logger.warning(f"  ✅ Found '{check_item}' in order text")
-                # Check if it exists in pricing config
-                for price_item in all_pricing.keys():
-                    if check_item in price_item.lower():
-                        logger.warning(f"    ✅ Matches pricing item: '{price_item}' = ₱{all_pricing[price_item]}")
-                    else:
-                        logger.warning(f"    ❌ No pricing match for: '{check_item}'")
-            else:
-                logger.warning(f"  ❌ '{check_item}' not found in order text")
     
-    return total
+    return parsed_items
+
+def calculate_order_total(order_text):
+    """Calculate estimated total for Facebook orders based on menu items"""
+    parsed_items = parse_order_items(order_text)
+    return sum(item["total"] for item in parsed_items)
 
 def validate_order_text(text):
     """Check if the text contains valid menu items"""
@@ -913,9 +918,10 @@ def save_order_to_supabase(psid, order_text):
         # Include time to make order number unique (even if same customer orders multiple times per day)
         order_number = f"FB-{now.strftime('%Y%m%d%H%M%S')}-{psid[-6:]}"
         
-        # Get complete menu name and calculate estimated total
+        # Get complete menu name, parse items, and calculate estimated total
         complete_menu_name = get_complete_menu_name(order_text)
-        estimated_total = calculate_order_total(order_text)
+        parsed_items = parse_order_items(order_text)
+        estimated_total = sum(item["total"] for item in parsed_items)
         
         url = f"{SUPABASE_URL}/rest/v1/online_orders"
         headers = {
@@ -924,12 +930,13 @@ def save_order_to_supabase(psid, order_text):
             "Prefer": "return=representation"
         }
         
-        # FIXED: Now includes complete_menu_name for proper sales reporting
+        # FIXED: Now includes complete_menu_name and parsed items for proper sales reporting
         payload = {
             "order_number": order_number,
             "facebook_psid": psid,
             "order_text": order_text,  # Original customer text
             "complete_menu_name": complete_menu_name,  # Complete menu name for POS (NOT customer name)
+            "items": parsed_items,  # Individual parsed items for proper sales reporting
             "order_type": "pickup",
             "status": "pending",
             "order_date": now.isoformat(),
