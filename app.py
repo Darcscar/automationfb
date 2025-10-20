@@ -310,7 +310,7 @@ def show_item_variations(psid, category_id, item_name):
         "text": message_text,
         "quick_replies": quick_replies
     })
-
+    
 def show_cart(psid):
     """Show user's cart"""
     cart = get_user_cart(psid)
