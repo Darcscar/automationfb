@@ -1,6 +1,6 @@
 {
   "menu_categories": {
-    "chicken": {
+    "Chicken": {
       "name": "Chicken",
       "description": "Fresh chicken dishes stir-fried to perfection",
       "items": [
@@ -10,7 +10,7 @@
         {"name": "General Tso Chicken", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]}
       ]
     },
-    "pork": {
+    "Pork": {
       "name": "Pork",
       "description": "Fresh pork dishes stir-fried to perfection",
       "items": [
@@ -20,7 +20,7 @@
         {"name": "Pad Kra Pao", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]}
       ]
     },
-    "beef": {
+    "Beef": {
       "name": "Beef",
       "description": "Fresh beef dishes stir-fried to perfection",
       "items": [
@@ -29,7 +29,7 @@
         {"name": "Black Pepper Beef", "variations": [{"name": "Small", "price": 149}, {"name": "Double", "price": 259}]}
       ]
     },
-    "seafood": {
+    "Seafood": {
       "name": "Seafood",
       "description": "Fresh seafood dishes stir-fried to perfection",
       "items": [
@@ -37,7 +37,7 @@
         {"name": "Squid w/ Veggie", "variations": [{"name": "Small", "price": 149}, {"name": "Double", "price": 249}]}
       ]
     },
-    "grill_master": {
+    "Grill_master": {
       "name": "Grill Master",
       "description": "Grilled specialties with rice",
       "items": [
@@ -46,7 +46,7 @@
         {"name": "Grilled Liempo", "variations": [{"name": "w/ Rice", "price": 165}, {"name": "Ala Carte", "price": 145}]}
       ]
     },
-    "sizzling": {
+    "Sizzling": {
       "name": "Sizzling",
       "description": "Hot sizzling plates",
       "items": [
@@ -57,7 +57,7 @@
         {"name": "Sizzling Chicharon Bulaklak", "variations": [{"name": "Regular", "price": 99}]}
       ]
     },
-    "yangchow": {
+    "Yangchow": {
       "name": "Yangchow",
       "description": "Fried rice with your choice of protein",
       "items": [
@@ -68,7 +68,7 @@
         {"name": "Yangchow w/ Lechon Kawali", "variations": [{"name": "Regular", "price": 145}]}
       ]
     },
-    "short_order": {
+    "Silog": {
       "name": "Silog Special",
       "description": "Quick meals and silog",
       "items": [
@@ -80,7 +80,7 @@
         {"name": "Adobosilog", "variations": [{"name": "Regular", "price": 89}]}
       ]
     },
-    "noodles": {
+    "Short Order": {
       "name": "Noodles",
       "description": "Fresh noodles and soups",
       "items": [
@@ -89,7 +89,7 @@
         {"name": "Lomi Batangas", "variations": [{"name": "Solo", "price": 70}, {"name": "Large", "price": 240}]}
       ]
     },
-    "drinks": {
+    "Drinks": {
       "name": "Drinks",
       "description": "Refreshing beverages",
       "items": [
@@ -100,7 +100,7 @@
         {"name": "Milky Melon", "variations": [{"name": "Regular", "price": 25}]}
       ]
     },
-    "extras": {
+    "Extras": {
       "name": "Extras",
       "description": "Additional items and sides",
       "items": [
@@ -109,7 +109,7 @@
         {"name": "Garlic Rice", "variations": [{"name": "Regular", "price": 35}]},
         {"name": "Hainanese Rice", "variations": [{"name": "Regular", "price": 35}]},
         {"name": "Plain Rice", "variations": [{"name": "Regular", "price": 25}]},
-        {"name": "Egg", "variations": [{"name": "Fried", "price": 15}, {"name": "Scrambled", "price": 15}, {"name": "Boiled", "price": 15}]}
+        {"name": "Egg", "variations": [{"name": "Fried", "price": 15}]}
       ]
     }
   }
