@@ -284,8 +284,8 @@ def show_item_variations(psid, category_id, item_name):
     for item in items:
         if item["name"] == item_name:
             selected_item = item
-            break
-    
+                        break
+            
     if not selected_item:
         return call_send_api(psid, {"text": "Item not found. Please try again."})
     
@@ -294,7 +294,7 @@ def show_item_variations(psid, category_id, item_name):
     # Create quick reply buttons for variations
     quick_replies = []
     
-    for variation in variations:
+            for variation in variations:
         # Create safe names for payload
         safe_item_name = item_name.replace(" ", "_").replace("/", "_").replace("&", "and")
         safe_variation_name = variation['name'].replace(" ", "_").replace("/", "_").replace("&", "and")
@@ -305,11 +305,11 @@ def show_item_variations(psid, category_id, item_name):
         })
     
     # Add navigation buttons
-    quick_replies.append({
-        "content_type": "text",
+        quick_replies.append({
+            "content_type": "text",
         "title": "🔙 Back to Items",
         "payload": f"CATEGORY_{category_id}"
-    })
+        })
     
     quick_replies.append({
         "content_type": "text",
@@ -356,8 +356,8 @@ def show_cart(psid):
             "title": f"❌ Remove {item['item']}",
             "payload": f"REMOVE_ITEM_{item['item']}_{item['variation']}"
         })
-
-    call_send_api(psid, {
+                
+                call_send_api(psid, {
         "text": format_cart_summary(psid),
         "quick_replies": quick_replies
     })
@@ -630,6 +630,19 @@ def handle_payload(psid, payload=None, text_message=None):
     # Handle category selection
     if payload and payload.startswith("CATEGORY_"):
         category_id = payload.replace("CATEGORY_", "")
+        # Redirect legacy 'stir_fry' to the new split categories
+        if category_id == "stir_fry":
+            quick_replies = [
+                {"content_type": "text", "title": "🐔 Chicken", "payload": "CATEGORY_chicken"},
+                {"content_type": "text", "title": "🐷 Pork", "payload": "CATEGORY_pork"},
+                {"content_type": "text", "title": "🐮 Beef", "payload": "CATEGORY_beef"},
+                {"content_type": "text", "title": "🐟 Seafood", "payload": "CATEGORY_seafood"},
+                {"content_type": "text", "title": "🏠 Main Menu", "payload": "MAIN_MENU"}
+            ]
+            return call_send_api(psid, {
+                "text": "Stir Fry has been reorganized. Please choose a category:",
+                "quick_replies": quick_replies
+            })
         return show_category_items(psid, category_id)
     
     # Handle item selection
@@ -775,7 +788,7 @@ def webhook():
                     msg = event["message"]
                     if msg.get("quick_reply"):
                         payload = msg["quick_reply"].get("payload")
-                        handle_payload(psid, payload=payload)
+                            handle_payload(psid, payload=payload)
                     elif "text" in msg:
                         handle_payload(psid, text_message=msg.get("text", "").strip())
                 elif "postback" in event:
