@@ -37,14 +37,10 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6
 # Configuration
 CONFIG_FILE = "config.json"
 CATEGORY_MENU_FILE = "category_menu.json"
-CATEGORY_MENU_URL = os.getenv("CATEGORY_MENU_URL")  # Optional remote JSON for live menu
-MENU_CACHE_TTL_SECONDS = int(os.getenv("MENU_CACHE_TTL", "60"))  # TTL for URL-fetched menu
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN") or os.getenv("CATEGORY_MENU_TOKEN")  # Token for admin endpoints
 config = {}
 category_menu = {}
 config_last_modified = None
 category_menu_last_modified = None
-category_menu_cache_expiry = None  # For URL-based cache expiry
 
 def load_config():
     global config, config_last_modified
@@ -71,25 +67,12 @@ def load_config():
     except Exception as e:
         logger.error(f"Error loading config: {e}")
 
-def load_category_menu(force: bool = False):
-    global category_menu, category_menu_last_modified, category_menu_cache_expiry
+def load_category_menu():
+    global category_menu, category_menu_last_modified
     try:
-        # Prefer URL source if provided
-        if CATEGORY_MENU_URL:
-            now = datetime.now()
-            should_refresh = force or (category_menu_cache_expiry is None) or (now >= category_menu_cache_expiry)
-            if should_refresh:
-                resp = requests.get(CATEGORY_MENU_URL, timeout=15)
-                resp.raise_for_status()
-                category_menu = resp.json()
-                category_menu_cache_expiry = now + timedelta(seconds=MENU_CACHE_TTL_SECONDS)
-                logger.info(f"Category menu loaded from URL {CATEGORY_MENU_URL} (TTL {MENU_CACHE_TTL_SECONDS}s)")
-            return
-
-        # Fallback to local file with mtime detection
         if os.path.exists(CATEGORY_MENU_FILE):
             current_modified = os.path.getmtime(CATEGORY_MENU_FILE)
-            if force or category_menu_last_modified != current_modified:
+            if category_menu_last_modified != current_modified:
                 with open(CATEGORY_MENU_FILE, 'r') as f:
                     category_menu = json.load(f)
                 category_menu_last_modified = current_modified
@@ -187,16 +170,13 @@ def show_categories(psid):
     # Create quick reply buttons for categories
     quick_replies = []
     categories = category_menu["menu_categories"]
-    # Only show parent categories in desired order
-    parent_order = ["stir_fry", "yangchow", "sizzling", "short_order", "grill_master"]
-    for category_id in parent_order:
-        if category_id in categories:
-            category_data = categories[category_id]
-            quick_replies.append({
-                "content_type": "text",
-                "title": category_data["name"],
-                "payload": f"CATEGORY_{category_id}"
-            })
+    
+    for category_id, category_data in categories.items():
+        quick_replies.append({
+            "content_type": "text",
+            "title": category_data["name"],
+            "payload": f"CATEGORY_{category_id}"
+        })
     
     # Add cart and checkout options
     cart = get_user_cart(psid)
@@ -220,10 +200,8 @@ def show_categories(psid):
     })
     
     message_text = "🍽️ Choose a category to browse our menu:\n\n"
-    for category_id in parent_order:
-        if category_id in categories:
-            category_data = categories[category_id]
-            message_text += f"• {category_data['name']} - {category_data.get('description', '')}\n"
+    for category_id, category_data in categories.items():
+        message_text += f"• {category_data['name']} - {category_data['description']}\n"
     
     call_send_api(psid, {
         "text": message_text,
@@ -235,46 +213,11 @@ def show_category_items(psid, category_id):
     load_category_menu()
     
     categories = category_menu.get("menu_categories", {})
-    category_data = None
-    is_subcategory = False
-
-    # Try top-level category first
-    if category_id in categories:
-        category_data = categories[category_id]
-        else:
-        # Try resolving as a subcategory under any parent
-        for parent_id, parent_data in categories.items():
-            subcats = parent_data.get("subcategories") or {}
-            if category_id in subcats:
-                category_data = subcats[category_id]
-                is_subcategory = True
-                                break
-
-    if not category_data:
+    if category_id not in categories:
         return call_send_api(psid, {"text": "Category not found. Please try again."})
-
-    # If this category has subcategories, show them instead of items
-    if category_data.get("subcategories"):
-        subcats = category_data["subcategories"]
-        quick_replies = []
-        for sub_id, sub_data in subcats.items():
-            quick_replies.append({
-                "content_type": "text",
-                "title": sub_data["name"],
-                "payload": f"CATEGORY_{sub_id}"
-            })
-        quick_replies.append({"content_type": "text", "title": "🔙 Back to Categories", "payload": "CATEGORIES"})
-        cart = get_user_cart(psid)
-        if cart:
-            quick_replies.append({"content_type": "text", "title": "🛒 View Cart", "payload": "VIEW_CART"})
-
-        message_text = f"🍽️ {category_data['name']}\n\nChoose a subcategory:\n\n"
-        for sub_id, sub_data in subcats.items():
-            message_text += f"• {sub_data['name']} - {sub_data.get('description', '')}\n"
-
-        return call_send_api(psid, {"text": message_text, "quick_replies": quick_replies})
-
-    items = category_data.get("items", [])
+    
+    category_data = categories[category_id]
+    items = category_data["items"]
     
     # Create quick reply buttons for items (max 13 buttons)
     quick_replies = []
@@ -320,24 +263,19 @@ def show_item_variations(psid, category_id, item_name):
     load_category_menu()
     
     categories = category_menu.get("menu_categories", {})
-    items = []
-    if category_id in categories:
-        items = categories[category_id].get("items", [])
-                        else:
-        # resolve as subcategory
-        for parent_id, parent_data in categories.items():
-            subcats = parent_data.get("subcategories") or {}
-            if category_id in subcats:
-                items = subcats[category_id].get("items", [])
-                            break
-                
+    if category_id not in categories:
+        return call_send_api(psid, {"text": "Category not found. Please try again."})
+    
+    category_data = categories[category_id]
+    items = category_data["items"]
+    
     # Find the specific item
     selected_item = None
     for item in items:
         if item["name"] == item_name:
             selected_item = item
-                            break
-                    
+            break
+    
     if not selected_item:
         return call_send_api(psid, {"text": "Item not found. Please try again."})
     
@@ -346,7 +284,7 @@ def show_item_variations(psid, category_id, item_name):
     # Create quick reply buttons for variations
     quick_replies = []
     
-            for variation in variations:
+    for variation in variations:
         # Create safe names for payload
         safe_item_name = item_name.replace(" ", "_").replace("/", "_").replace("&", "and")
         safe_variation_name = variation['name'].replace(" ", "_").replace("/", "_").replace("&", "and")
@@ -357,11 +295,11 @@ def show_item_variations(psid, category_id, item_name):
         })
     
     # Add navigation buttons
-        quick_replies.append({
-            "content_type": "text",
+    quick_replies.append({
+        "content_type": "text",
         "title": "🔙 Back to Items",
         "payload": f"CATEGORY_{category_id}"
-        })
+    })
     
     quick_replies.append({
         "content_type": "text",
@@ -408,8 +346,8 @@ def show_cart(psid):
             "title": f"❌ Remove {item['item']}",
             "payload": f"REMOVE_ITEM_{item['item']}_{item['variation']}"
         })
-                
-                call_send_api(psid, {
+
+    call_send_api(psid, {
         "text": format_cart_summary(psid),
         "quick_replies": quick_replies
     })
@@ -827,56 +765,13 @@ def webhook():
                     msg = event["message"]
                     if msg.get("quick_reply"):
                         payload = msg["quick_reply"].get("payload")
-                            handle_payload(psid, payload=payload)
+                        handle_payload(psid, payload=payload)
                     elif "text" in msg:
                         handle_payload(psid, text_message=msg.get("text", "").strip())
                 elif "postback" in event:
                     handle_payload(psid, payload=event["postback"].get("payload"))
 
     return Response("EVENT_RECEIVED", status=200)
-
-# Admin endpoints for live menu control
-@app.route("/admin/reload-menu", methods=["POST"])
-def admin_reload_menu():
-    try:
-        token = request.args.get("token") or request.headers.get("X-Admin-Token")
-        if not ADMIN_TOKEN or token != ADMIN_TOKEN:
-            return Response(json.dumps({"error": "Unauthorized"}), status=401, mimetype="application/json")
-
-        load_category_menu(force=True)
-        src = CATEGORY_MENU_URL or CATEGORY_MENU_FILE
-        resp = {
-            "success": True,
-            "source": src,
-            "cache_expiry": category_menu_cache_expiry.isoformat() if category_menu_cache_expiry else None,
-            "categories": list((category_menu or {}).get("menu_categories", {}).keys())
-        }
-        return Response(json.dumps(resp), status=200, mimetype="application/json")
-    except Exception as e:
-        logger.error(f"Admin reload error: {e}")
-        return Response(json.dumps({"error": str(e)}), status=500, mimetype="application/json")
-
-@app.route("/admin/menu-status", methods=["GET"])
-def admin_menu_status():
-    try:
-        token = request.args.get("token") or request.headers.get("X-Admin-Token")
-        if not ADMIN_TOKEN or token != ADMIN_TOKEN:
-            return Response(json.dumps({"error": "Unauthorized"}), status=401, mimetype="application/json")
-
-        src = CATEGORY_MENU_URL or CATEGORY_MENU_FILE
-        status = {
-            "source": src,
-            "using_url": bool(CATEGORY_MENU_URL),
-            "ttl_seconds": MENU_CACHE_TTL_SECONDS,
-            "cache_expiry": category_menu_cache_expiry.isoformat() if category_menu_cache_expiry else None,
-            "last_modified_file": category_menu_last_modified,
-            "category_count": len((category_menu or {}).get("menu_categories", {})),
-            "categories": list((category_menu or {}).get("menu_categories", {}).keys()),
-        }
-        return Response(json.dumps(status), status=200, mimetype="application/json")
-    except Exception as e:
-        logger.error(f"Admin status error: {e}")
-        return Response(json.dumps({"error": str(e)}), status=500, mimetype="application/json")
 
 # Run
 if __name__ == "__main__":
