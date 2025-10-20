@@ -465,7 +465,7 @@ def get_manila_time():
 
 def get_store_hours():
     open_str = get_config_value('store_hours.open_time', '10:00')
-    close_str = get_config_value('store_hours.close_time', '22:00')
+    close_str = get_config_value('store_hours.close_time', '21:00')
     open_parts = open_str.split(':')
     close_parts = close_str.split(':')
     open_time = time(int(open_parts[0]), int(open_parts[1]))
