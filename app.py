@@ -284,7 +284,7 @@ def show_item_variations(psid, category_id, item_name):
     for item in items:
         if item["name"] == item_name:
             selected_item = item
-                        break
+            break
             
     if not selected_item:
         return call_send_api(psid, {"text": "Item not found. Please try again."})
@@ -294,7 +294,7 @@ def show_item_variations(psid, category_id, item_name):
     # Create quick reply buttons for variations
     quick_replies = []
     
-            for variation in variations:
+    for variation in variations:
         # Create safe names for payload
         safe_item_name = item_name.replace(" ", "_").replace("/", "_").replace("&", "and")
         safe_variation_name = variation['name'].replace(" ", "_").replace("/", "_").replace("&", "and")
@@ -356,8 +356,8 @@ def show_cart(psid):
             "title": f"❌ Remove {item['item']}",
             "payload": f"REMOVE_ITEM_{item['item']}_{item['variation']}"
         })
-                
-                call_send_api(psid, {
+    
+    call_send_api(psid, {
         "text": format_cart_summary(psid),
         "quick_replies": quick_replies
     })
@@ -788,7 +788,7 @@ def webhook():
                     msg = event["message"]
                     if msg.get("quick_reply"):
                         payload = msg["quick_reply"].get("payload")
-                            handle_payload(psid, payload=payload)
+                        handle_payload(psid, payload=payload)
                     elif "text" in msg:
                         handle_payload(psid, text_message=msg.get("text", "").strip())
                 elif "postback" in event:
