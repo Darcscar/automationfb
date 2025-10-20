@@ -133,11 +133,14 @@ def get_complete_menu_name(order_text):
     for category, items in menu_config.get("menu_items", {}).items():
         all_menu_items.extend(items)
     
-    # Find the best match
+    # Find the best match - prioritize longer, more specific matches
     best_match = None
     best_score = 0
     
-    for item in all_menu_items:
+    # Sort items by length (longest first) to prioritize specific matches
+    sorted_items = sorted(all_menu_items, key=len, reverse=True)
+    
+    for item in sorted_items:
         item_lower = item.lower()
         
         # Direct match (highest priority)
@@ -288,6 +291,32 @@ def calculate_order_total(order_text):
                                     found_items.append(f"{quantity}×{item}@{price} (yangchow match)")
                                     logger.info(f"Found yangchow item '{item}' for '{protein}' with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
                                 break
+                continue
+            
+            # Special handling for "peri peri chicken" -> "peri peri chicken w/ rice"
+            if "peri peri chicken" in text_lower and "peri peri chicken w/ rice" in item_lower:
+                item_position = text_lower.find("peri peri chicken")
+                is_valid_match = True
+                
+                if item_position > 0:
+                    char_before = text_lower[item_position - 1]
+                    if char_before.isalnum():
+                        is_valid_match = False
+                
+                if item_position + len("peri peri chicken") < len(text_lower):
+                    char_after = text_lower[item_position + len("peri peri chicken")]
+                    if char_after.isalnum():
+                        is_valid_match = False
+                
+                if is_valid_match:
+                    # Check if we already found a match for this item
+                    item_already_found = any("peri peri chicken" in found_item.lower() for found_item in found_items)
+                    if not item_already_found:
+                        quantity = 1
+                        item_total = quantity * price
+                        total += item_total
+                        found_items.append(f"{quantity}×{item}@{price} (peri peri match)")
+                        logger.info(f"Found peri peri chicken item '{item}' for 'peri peri chicken' with quantity {quantity} at ₱{price} tính total = ₱{item_total}")
                 continue
             
             # Special handling for "spicy pork ribs" -> "sweet and spicy pork ribs"
