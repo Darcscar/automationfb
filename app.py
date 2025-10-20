@@ -1,6 +1,7 @@
 """
-CATEGORY-BASED ORDERING SYSTEM - Facebook Bot for Pedro's Restaurant
+CATEGORY-BASED ORDERING SYSTEM - Facebook Python Base Bot for Pedro's Restaurant using Flask as framework
 NEW VERSION - Customers browse categories and select items instead of typing orders
+Developed BY: Darcscar
 """
 
 import os
@@ -37,10 +38,14 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6
 # Configuration
 CONFIG_FILE = "config.json"
 CATEGORY_MENU_FILE = "category_menu.json"
+CATEGORY_MENU_URL = os.getenv("CATEGORY_MENU_URL")  # Optional remote JSON for live menu
+MENU_CACHE_TTL_SECONDS = int(os.getenv("MENU_CACHE_TTL", "60"))  # TTL for URL-fetched menu
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN") or os.getenv("CATEGORY_MENU_TOKEN")  # Token for admin endpoints
 config = {}
 category_menu = {}
 config_last_modified = None
 category_menu_last_modified = None
+category_menu_cache_expiry = None  # For URL-based cache expiry
 
 def load_config():
     global config, config_last_modified
@@ -67,12 +72,25 @@ def load_config():
     except Exception as e:
         logger.error(f"Error loading config: {e}")
 
-def load_category_menu():
-    global category_menu, category_menu_last_modified
+def load_category_menu(force: bool = False):
+    global category_menu, category_menu_last_modified, category_menu_cache_expiry
     try:
+        # Prefer URL source if provided
+        if CATEGORY_MENU_URL:
+            now = datetime.now()
+            should_refresh = force or (category_menu_cache_expiry is None) or (now >= category_menu_cache_expiry)
+            if should_refresh:
+                resp = requests.get(CATEGORY_MENU_URL, timeout=15)
+                resp.raise_for_status()
+                category_menu = resp.json()
+                category_menu_cache_expiry = now + timedelta(seconds=MENU_CACHE_TTL_SECONDS)
+                logger.info(f"Category menu loaded from URL {CATEGORY_MENU_URL} (TTL {MENU_CACHE_TTL_SECONDS}s)")
+            return
+
+        # Fallback to local file with mtime detection
         if os.path.exists(CATEGORY_MENU_FILE):
             current_modified = os.path.getmtime(CATEGORY_MENU_FILE)
-            if category_menu_last_modified != current_modified:
+            if force or category_menu_last_modified != current_modified:
                 with open(CATEGORY_MENU_FILE, 'r') as f:
                     category_menu = json.load(f)
                 category_menu_last_modified = current_modified
@@ -532,7 +550,13 @@ def send_message_with_quick_replies(psid, text):
 def send_menu(psid):
     menu_url = get_config_value('urls.menu', 'https://i.imgur.com/c2ir2Qy.jpeg')
     call_send_api(psid, {"attachment": {"type": "image", "payload": {"url": menu_url, "is_reusable": True}}})
-    call_send_api(psid, {"text": "Here's our menu! 📋"})
+    
+    # Add return button after showing menu
+    quick_replies = [
+        {"content_type": "text", "title": "🍽️ Order Now", "payload": "CATEGORIES"},
+        {"content_type": "text", "title": "🏠 Main Menu", "payload": "MAIN_MENU"}
+    ]
+    call_send_api(psid, {"text": "Here's our menu! 📋", "quick_replies": quick_replies})
 
 def send_foodpanda(psid):
     foodpanda_url = get_config_value('urls.foodpanda', 'https://www.foodpanda.ph/restaurant/locg/pedros-old-manila-rd')
@@ -546,6 +570,13 @@ def send_foodpanda(psid):
             }
         }
     })
+    
+    # Add return button after showing Foodpanda
+    quick_replies = [
+        {"content_type": "text", "title": "🍽️ Order Now", "payload": "CATEGORIES"},
+        {"content_type": "text", "title": "🏠 Main Menu", "payload": "MAIN_MENU"}
+    ]
+    call_send_api(psid, {"text": "Or browse our menu categories to order directly! 🍽️", "quick_replies": quick_replies})
 
 def send_location(psid):
     google_map_url = get_config_value('urls.google_map', 'https://maps.app.goo.gl/GQUDgxLqgW6no26X8')
@@ -559,10 +590,23 @@ def send_location(psid):
             }
         }
     })
+    
+    # Add return button after showing location
+    quick_replies = [
+        {"content_type": "text", "title": "🍽️ Order Now", "payload": "CATEGORIES"},
+        {"content_type": "text", "title": "🏠 Main Menu", "payload": "MAIN_MENU"}
+    ]
+    call_send_api(psid, {"text": "Visit us soon! We'd love to serve you! 🍽️", "quick_replies": quick_replies})
 
 def send_contact_info(psid):
     phone_number = get_config_value('contact.phone_number', '09171505518 / (042)4215968')
-    call_send_api(psid, {"text": f"Contact us: {phone_number}"})
+    
+    # Add return button after showing contact info
+    quick_replies = [
+        {"content_type": "text", "title": "🍽️ Order Now", "payload": "CATEGORIES"},
+        {"content_type": "text", "title": "🏠 Main Menu", "payload": "MAIN_MENU"}
+    ]
+    call_send_api(psid, {"text": f"Contact us: {phone_number}\n\nCall us for quick orders or browse our menu! 🍽️", "quick_replies": quick_replies})
 
 # Handle messages
 def handle_payload(psid, payload=None, text_message=None):
@@ -667,7 +711,12 @@ def handle_payload(psid, payload=None, text_message=None):
     if payload == "Q_CONTACT":
         return send_contact_info(psid)
     if payload == "Q_HOURS":
-        call_send_api(psid, {"text": hours_message()})
+        # Add return button after showing hours
+        quick_replies = [
+            {"content_type": "text", "title": "🍽️ Order Now", "payload": "CATEGORIES"},
+            {"content_type": "text", "title": "🏠 Main Menu", "payload": "MAIN_MENU"}
+        ]
+        call_send_api(psid, {"text": hours_message() + "\n\nBrowse our menu to place your order! 🍽️", "quick_replies": quick_replies})
         return
 
     if text_message:
@@ -741,6 +790,49 @@ def webhook():
                     handle_payload(psid, payload=event["postback"].get("payload"))
 
     return Response("EVENT_RECEIVED", status=200)
+
+# Admin endpoints for live menu control
+@app.route("/admin/reload-menu", methods=["POST"])
+def admin_reload_menu():
+    try:
+        token = request.args.get("token") or request.headers.get("X-Admin-Token")
+        if not ADMIN_TOKEN or token != ADMIN_TOKEN:
+            return Response(json.dumps({"error": "Unauthorized"}), status=401, mimetype="application/json")
+
+        load_category_menu(force=True)
+        src = CATEGORY_MENU_URL or CATEGORY_MENU_FILE
+        resp = {
+            "success": True,
+            "source": src,
+            "cache_expiry": category_menu_cache_expiry.isoformat() if category_menu_cache_expiry else None,
+            "categories": list((category_menu or {}).get("menu_categories", {}).keys())
+        }
+        return Response(json.dumps(resp), status=200, mimetype="application/json")
+    except Exception as e:
+        logger.error(f"Admin reload error: {e}")
+        return Response(json.dumps({"error": str(e)}), status=500, mimetype="application/json")
+
+@app.route("/admin/menu-status", methods=["GET"])
+def admin_menu_status():
+    try:
+        token = request.args.get("token") or request.headers.get("X-Admin-Token")
+        if not ADMIN_TOKEN or token != ADMIN_TOKEN:
+            return Response(json.dumps({"error": "Unauthorized"}), status=401, mimetype="application/json")
+
+        src = CATEGORY_MENU_URL or CATEGORY_MENU_FILE
+        status = {
+            "source": src,
+            "using_url": bool(CATEGORY_MENU_URL),
+            "ttl_seconds": MENU_CACHE_TTL_SECONDS,
+            "cache_expiry": category_menu_cache_expiry.isoformat() if category_menu_cache_expiry else None,
+            "last_modified_file": category_menu_last_modified,
+            "category_count": len((category_menu or {}).get("menu_categories", {})),
+            "categories": list((category_menu or {}).get("menu_categories", {}).keys()),
+        }
+        return Response(json.dumps(status), status=200, mimetype="application/json")
+    except Exception as e:
+        logger.error(f"Admin status error: {e}")
+        return Response(json.dumps({"error": str(e)}), status=500, mimetype="application/json")
 
 # Run
 if __name__ == "__main__":
