@@ -366,6 +366,9 @@ def process_checkout(psid):
     
     order_text = ", ".join(order_items)
     
+    # Calculate total before clearing cart
+    total = get_cart_total(psid)
+    
     # Save order to Supabase
     success, order_number = save_order_to_supabase(psid, order_text, cart)
     
@@ -373,8 +376,6 @@ def process_checkout(psid):
         # Clear cart
         clear_cart(psid)
         user_states.pop(psid, None)
-        
-        total = get_cart_total(psid)
         
         # Add pickup time information based on store status
         if is_store_open():
