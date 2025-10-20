@@ -214,6 +214,40 @@ def show_category_items(psid, category_id):
     
     categories = category_menu.get("menu_categories", {})
     if category_id not in categories:
+        # Compatibility fallback: support virtual split of legacy 'stir_fry'
+        if category_id in ("chicken", "pork", "beef", "seafood") and "stir_fry" in categories:
+            legacy_items = categories["stir_fry"].get("items", [])
+            type_to_keywords = {
+                "chicken": ["chicken", "general tso", "kung pao"],
+                "pork": ["pork", "ribs", "cashew"],
+                "beef": ["beef", "broccoli", "mushroom", "black pepper"],
+                "seafood": ["shrimp", "squid", "veggie"],
+            }
+            keywords = type_to_keywords[category_id]
+            filtered = [it for it in legacy_items if any(kw.lower() in it["name"].lower() for kw in keywords)]
+            if not filtered:
+                return call_send_api(psid, {"text": "No items found for this category. Please choose another."})
+
+            # Build and send from filtered items
+            quick_replies = []
+            for item in filtered[:10]:
+                safe_name = item["name"].replace(" ", "_").replace("/", "_").replace("&", "and")
+                quick_replies.append({
+                    "content_type": "text",
+                    "title": item["name"],
+                    "payload": f"ITEM|{category_id}|{safe_name}"
+                })
+            quick_replies.append({"content_type": "text", "title": "🔙 Back to Categories", "payload": "CATEGORIES"})
+            cart = get_user_cart(psid)
+            if cart:
+                quick_replies.append({"content_type": "text", "title": "🛒 View Cart", "payload": "VIEW_CART"})
+            message_text = f"🍽️ {category_id.title()}\n\n"
+            for item in filtered:
+                message_text += f"• {item['name']}\n"
+                for variation in item["variations"]:
+                    message_text += f"  - {variation['name']}: ₱{variation['price']}\n"
+                message_text += "\n"
+            return call_send_api(psid, {"text": message_text, "quick_replies": quick_replies})
         return call_send_api(psid, {"text": "Category not found. Please try again."})
     
     category_data = categories[category_id]
@@ -269,6 +303,28 @@ def show_item_variations(psid, category_id, item_name):
     
     categories = category_menu.get("menu_categories", {})
     if category_id not in categories:
+        # Compatibility: resolve item from legacy 'stir_fry' when virtual categories are used
+        if category_id in ("chicken", "pork", "beef", "seafood") and "stir_fry" in categories:
+            items = categories["stir_fry"].get("items", [])
+            selected_item = next((it for it in items if it["name"] == item_name), None)
+            if not selected_item:
+                return call_send_api(psid, {"text": "Item not found. Please try again."})
+            variations = selected_item["variations"]
+            quick_replies = []
+            for variation in variations:
+                safe_item_name = item_name.replace(" ", "_").replace("/", "_").replace("&", "and")
+                safe_variation_name = variation['name'].replace(" ", "_").replace("/", "_").replace("&", "and")
+                quick_replies.append({
+                    "content_type": "text",
+                    "title": f"{variation['name']} - ₱{variation['price']}",
+                    "payload": f"ADD_ITEM|{category_id}|{safe_item_name}|{safe_variation_name}|{variation['price']}"
+                })
+            quick_replies.append({"content_type": "text", "title": "🔙 Back to Items", "payload": f"CATEGORY_{category_id}"})
+            quick_replies.append({"content_type": "text", "title": "🏠 Main Menu", "payload": "MAIN_MENU"})
+            message_text = f"🍽️ {item_name}\n\nChoose a variation:\n\n"
+            for variation in variations:
+                message_text += f"• {variation['name']}: ₱{variation['price']}\n"
+            return call_send_api(psid, {"text": message_text, "quick_replies": quick_replies})
         return call_send_api(psid, {"text": "Category not found. Please try again."})
     
     category_data = categories[category_id]
@@ -305,11 +361,11 @@ def show_item_variations(psid, category_id, item_name):
         })
     
     # Add navigation buttons
-        quick_replies.append({
-            "content_type": "text",
+    quick_replies.append({
+        "content_type": "text",
         "title": "🔙 Back to Items",
         "payload": f"CATEGORY_{category_id}"
-        })
+    })
     
     quick_replies.append({
         "content_type": "text",
