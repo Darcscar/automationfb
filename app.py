@@ -214,46 +214,77 @@ def show_category_items(psid, category_id):
     
     categories = category_menu.get("menu_categories", {})
     if category_id not in categories:
-        # Compatibility fallback: support virtual split of legacy 'stir_fry'
-        if category_id in ("chicken", "pork", "beef", "seafood") and "stir_fry" in categories:
-            legacy_items = categories["stir_fry"].get("items", [])
-            type_to_keywords = {
-                "chicken": ["chicken", "general tso", "kung pao"],
-                "pork": ["pork", "ribs", "cashew"],
-                "beef": ["beef", "broccoli", "mushroom", "black pepper"],
-                "seafood": ["shrimp", "squid", "veggie"],
-            }
-            keywords = type_to_keywords[category_id]
-            filtered = [it for it in legacy_items if any(kw.lower() in it["name"].lower() for kw in keywords)]
-            if not filtered:
+        # Support nested stir_fry subcategories like 'stir_fry_chicken'
+        if category_id.startswith("stir_fry_") and "stir_fry" in categories:
+            subcats = categories["stir_fry"].get("subcategories", {})
+            if category_id in subcats:
+                subcat_data = subcats[category_id]
+                items = subcat_data.get("items", [])
+                if not items:
+                    return call_send_api(psid, {"text": "No items found for this category. Please choose another."})
+                quick_replies = []
+                for item in items[:10]:
+                    safe_name = item["name"].replace(" ", "_").replace("/", "_").replace("&", "and")
+                    quick_replies.append({
+                        "content_type": "text",
+                        "title": item["name"],
+                        "payload": f"ITEM|{category_id}|{safe_name}"
+                    })
+                quick_replies.append({"content_type": "text", "title": "🔙 Back to Categories", "payload": "CATEGORIES"})
+                cart = get_user_cart(psid)
+                if cart:
+                    quick_replies.append({"content_type": "text", "title": "🛒 View Cart", "payload": "VIEW_CART"})
+                message_text = f"🍽️ {subcat_data.get('name', category_id).title()}\n\n"
+                for item in items:
+                    message_text += f"• {item['name']}\n"
+                    for variation in item["variations"]:
+                        message_text += f"  - {variation['name']}: ₱{variation['price']}\n"
+                    message_text += "\n"
+                return call_send_api(psid, {"text": message_text, "quick_replies": quick_replies})
+        
+        # If selecting 'stir_fry' top-level, show its subcategories
+        if category_id == "stir_fry" and "stir_fry" in categories:
+            subcats = categories["stir_fry"].get("subcategories", {})
+            if not subcats:
                 return call_send_api(psid, {"text": "No items found for this category. Please choose another."})
-
-            # Build and send from filtered items
             quick_replies = []
-            for item in filtered[:10]:
-                safe_name = item["name"].replace(" ", "_").replace("/", "_").replace("&", "and")
+            message_text = "🍽️ Stir Fry\n\nChoose a subcategory:\n\n"
+            for subcat_id, subcat in subcats.items():
                 quick_replies.append({
                     "content_type": "text",
-                    "title": item["name"],
-                    "payload": f"ITEM|{category_id}|{safe_name}"
+                    "title": subcat["name"],
+                    "payload": f"CATEGORY_{subcat_id}"
                 })
+                message_text += f"• {subcat['name']} - {subcat.get('description', '')}\n"
             quick_replies.append({"content_type": "text", "title": "🔙 Back to Categories", "payload": "CATEGORIES"})
             cart = get_user_cart(psid)
             if cart:
                 quick_replies.append({"content_type": "text", "title": "🛒 View Cart", "payload": "VIEW_CART"})
-            message_text = f"🍽️ {category_id.title()}\n\n"
-            for item in filtered:
-                message_text += f"• {item['name']}\n"
-                for variation in item["variations"]:
-                    message_text += f"  - {variation['name']}: ₱{variation['price']}\n"
-                message_text += "\n"
             return call_send_api(psid, {"text": message_text, "quick_replies": quick_replies})
+        
+        # Fallback legacy split keywords (kept for compatibility but not used with new structure)
         return call_send_api(psid, {"text": "Category not found. Please try again."})
     
     category_data = categories[category_id]
     
     # Handle old category structure that might not have 'items' key
     if "items" not in category_data:
+        # If this is a container category with subcategories, prompt user to choose one
+        if category_id == "stir_fry" and "subcategories" in category_data:
+            quick_replies = []
+            message_text = "🍽️ Stir Fry\n\nChoose a subcategory:\n\n"
+            for subcat_id, subcat in category_data.get("subcategories", {}).items():
+                quick_replies.append({
+                    "content_type": "text",
+                    "title": subcat["name"],
+                    "payload": f"CATEGORY_{subcat_id}"
+                })
+                message_text += f"• {subcat['name']} - {subcat.get('description', '')}\n"
+            quick_replies.append({"content_type": "text", "title": "🔙 Back to Categories", "payload": "CATEGORIES"})
+            cart = get_user_cart(psid)
+            if cart:
+                quick_replies.append({"content_type": "text", "title": "🛒 View Cart", "payload": "VIEW_CART"})
+            return call_send_api(psid, {"text": message_text, "quick_replies": quick_replies})
         return call_send_api(psid, {"text": "This category is no longer available. Please browse our updated menu categories."})
     
     items = category_data["items"]
@@ -303,9 +334,13 @@ def show_item_variations(psid, category_id, item_name):
     
     categories = category_menu.get("menu_categories", {})
     if category_id not in categories:
-        # Compatibility: resolve item from legacy 'stir_fry' when virtual categories are used
-        if category_id in ("chicken", "pork", "beef", "seafood") and "stir_fry" in categories:
-            items = categories["stir_fry"].get("items", [])
+        # Support nested stir_fry subcategories
+        if category_id.startswith("stir_fry_") and "stir_fry" in categories:
+            subcats = categories["stir_fry"].get("subcategories", {})
+            subcat = subcats.get(category_id)
+            if not subcat:
+                return call_send_api(psid, {"text": "Category not found. Please try again."})
+            items = subcat.get("items", [])
             selected_item = next((it for it in items if it["name"] == item_name), None)
             if not selected_item:
                 return call_send_api(psid, {"text": "Item not found. Please try again."})
@@ -686,19 +721,24 @@ def handle_payload(psid, payload=None, text_message=None):
     # Handle category selection
     if payload and payload.startswith("CATEGORY_"):
         category_id = payload.replace("CATEGORY_", "")
-        # Redirect legacy 'stir_fry' to the new split categories
+        # If 'stir_fry' selected, show its real subcategories from category_menu.json
         if category_id == "stir_fry":
-            quick_replies = [
-                {"content_type": "text", "title": "🐔 Chicken", "payload": "CATEGORY_chicken"},
-                {"content_type": "text", "title": "🐷 Pork", "payload": "CATEGORY_pork"},
-                {"content_type": "text", "title": "🐮 Beef", "payload": "CATEGORY_beef"},
-                {"content_type": "text", "title": "🐟 Seafood", "payload": "CATEGORY_seafood"},
-                {"content_type": "text", "title": "🏠 Main Menu", "payload": "MAIN_MENU"}
-            ]
-            return call_send_api(psid, {
-                "text": "Stir Fry has been reorganized. Please choose a category:",
-                "quick_replies": quick_replies
-            })
+            load_category_menu()
+            subcats = (category_menu.get("menu_categories", {})
+                                  .get("stir_fry", {})
+                                  .get("subcategories", {}))
+            if subcats:
+                quick_replies = []
+                message_text = "🍽️ Stir Fry\n\nChoose a subcategory:\n\n"
+                for subcat_id, subcat in subcats.items():
+                    quick_replies.append({
+                        "content_type": "text",
+                        "title": subcat.get("name", subcat_id),
+                        "payload": f"CATEGORY_{subcat_id}"
+                    })
+                    message_text += f"• {subcat.get('name', subcat_id)} - {subcat.get('description', '')}\n"
+                quick_replies.append({"content_type": "text", "title": "🏠 Main Menu", "payload": "MAIN_MENU"})
+                return call_send_api(psid, {"text": message_text, "quick_replies": quick_replies})
         return show_category_items(psid, category_id)
     
     # Handle item selection
@@ -719,6 +759,16 @@ def handle_payload(psid, payload=None, text_message=None):
                     item_safe_name = item["name"].replace(" ", "_").replace("/", "_").replace("&", "and")
                     if item_safe_name == safe_name:
                         return show_item_variations(psid, category_id, item["name"])
+            # Support stir_fry subcategories
+            if category_id.startswith("stir_fry_") and "stir_fry" in categories:
+                subcats = categories["stir_fry"].get("subcategories", {})
+                subcat = subcats.get(category_id)
+                if subcat:
+                    items = subcat.get("items", [])
+                    for item in items:
+                        item_safe_name = item["name"].replace(" ", "_").replace("/", "_").replace("&", "and")
+                        if item_safe_name == safe_name:
+                            return show_item_variations(psid, category_id, item["name"])
             
             return call_send_api(psid, {"text": "Item not found. Please try again."})
     
@@ -748,6 +798,21 @@ def handle_payload(psid, payload=None, text_message=None):
                                 # Show confirmation and cart
                                 call_send_api(psid, {"text": f"✅ Added to cart: {item['name']} ({variation['name']}) - ₱{price}"})
                                 return show_cart(psid)
+            # Support stir_fry subcategories
+            if category_id.startswith("stir_fry_") and "stir_fry" in categories:
+                subcats = categories["stir_fry"].get("subcategories", {})
+                subcat = subcats.get(category_id)
+                if subcat:
+                    items = subcat.get("items", [])
+                    for item in items:
+                        item_safe_name = item["name"].replace(" ", "_").replace("/", "_").replace("&", "and")
+                        if item_safe_name == safe_item_name:
+                            for variation in item["variations"]:
+                                var_safe_name = variation['name'].replace(" ", "_").replace("/", "_").replace("&", "and")
+                                if var_safe_name == safe_variation_name:
+                                    add_to_cart(psid, item["name"], variation['name'], price)
+                                    call_send_api(psid, {"text": f"✅ Added to cart: {item['name']} ({variation['name']}) - ₱{price}"})
+                                    return show_cart(psid)
             
             return call_send_api(psid, {"text": "Item not found. Please try again."})
     
