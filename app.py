@@ -1,22 +1,38 @@
-            # Special handling for "spicy pork strips" - prevent duplicate matching
-            if "spicy pork strips" in text_lower and "spicy pork strips" in item_lower:
-                # Check if we already found a match for this item
-                item_already_found = any("spicy pork strips" in parsed_item["name"].lower() for parsed_item in parsed_items)
-                if item_already_found:
-                    logger.info(f"Skipping '{item}' - spicy pork strips already found")
-                    continue
-                
-                # Check if customer specified a size variation
-                customer_specified_size = None
-                if "small" in text_lower:
-                    customer_specified_size = "small"
-                elif "double" in text_lower:
-                    customer_specified_size = "double"
-                
-                # If customer specified a size, only match that size
-                if customer_specified_size and customer_specified_size not in item_lower:
-                    logger.info(f"Skipping '{item}' - customer specified '{customer_specified_size}' but item is '{item_lower}'")
-                    continue= os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnYXdwa3BjZnJ4b2JncnN5c2ljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM1ODI5NjQsImV4cCI6MjA2OTE1ODk2NH0.AsNuusVkPzozfCB6QTyLy5cnQUgwmXsjNhNH3hb75Ew")
+"""
+FINAL WORKING VERSION - Facebook Bot for Pedro's Restaurant
+FIXED VERSION - Now includes complete_menu_name for proper sales reporting
+"""
+
+import os
+import json
+import logging
+from flask import Flask, request, Response
+try:
+    from flask_cors import CORS
+    CORS_AVAILABLE = True
+except ImportError:
+    CORS_AVAILABLE = False
+    print("Warning: flask-cors not available, CORS disabled")
+import requests
+from datetime import datetime, time, date, timedelta
+from zoneinfo import ZoneInfo
+
+app = Flask(__name__)
+if CORS_AVAILABLE:
+    CORS(app)  # Enable CORS for all routes
+
+# Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("FBBot")
+
+# Tokens
+PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "EAHJTYAULctYBPozkAuQsRvMfnqGRaz1kprNm3wxmF9gZA4hx9LtWaSZClpnk9fiDGQ4uSe0Fwv7GCGyJN8G4yVvs7UZAASRL4mhBOy6nqwhe2OZA9ovZC7ACU3JdOF4hag9JTmhLVKuK7nVcZAcj6QZAwpnG437jtXLeL6K6xREI04ZB8L2f06rrbaCSiKXmalbTUCuEZCN4ArgZDZD")
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "123darcscar")
+FB_GRAPH = "https://graph.facebook.com/v19.0"
+
+# Supabase Configuration
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://tgawpkpcfrxobgrsysic.supabase.co")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnYXdwa3BjZnJ4b2JncnN5c2ljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM1ODI5NjQsImV4cCI6MjA2OTE1ODk2NH0.AsNuusVkPzozfCB6QTyLy5cnQUgwmXsjNhNH3hb75Ew")
 
 # Configuration
 CONFIG_FILE = "config.json"
