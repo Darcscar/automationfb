@@ -1,41 +1,47 @@
 {
   "menu_categories": {
-    "chicken": {
-      "name": "Chicken",
-      "description": "Fresh chicken dishes stir-fried to perfection",
-      "items": [
-        {"name": "Orange Chicken", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]},
-        {"name": "Chicken w/ Mushroom", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]},
-        {"name": "Kung Pao Chicken", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]},
-        {"name": "General Tso Chicken", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]}
-      ]
-    },
-    "pork": {
-      "name": "Pork",
-      "description": "Fresh pork dishes stir-fried to perfection",
-      "items": [
-        {"name": "Sweet and Spicy Pork Ribs", "variations": [{"name": "Small", "price": 180}, {"name": "Double", "price": 279}]},
-        {"name": "Thai Pork Cashew", "variations": [{"name": "Small", "price": 149}, {"name": "Double", "price": 229}]},
-        {"name": "Spicy Pork Strips", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]},
-        {"name": "Pad Kra Pao", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]}
-      ]
-    },
-    "beef": {
-      "name": "Beef",
-      "description": "Fresh beef dishes stir-fried to perfection",
-      "items": [
-        {"name": "Beef Broccoli", "variations": [{"name": "Small", "price": 149}, {"name": "Double", "price": 259}]},
-        {"name": "Beef Mushroom", "variations": [{"name": "Small", "price": 149}, {"name": "Double", "price": 259}]},
-        {"name": "Black Pepper Beef", "variations": [{"name": "Small", "price": 149}, {"name": "Double", "price": 259}]}
-      ]
-    },
-    "seafood": {
-      "name": "Seafood",
-      "description": "Fresh seafood dishes stir-fried to perfection",
-      "items": [
-        {"name": "Shrimp w/ Veggie", "variations": [{"name": "Small", "price": 169}, {"name": "Double", "price": 269}]},
-        {"name": "Squid w/ Veggie", "variations": [{"name": "Small", "price": 149}, {"name": "Double", "price": 249}]}
-      ]
+    "stir_fry": {
+      "name": "Stir Fry",
+      "description": "Fresh vegetables and meat stir-fried to perfection",
+      "subcategories": {
+        "stir_fry_chicken": {
+          "name": "Chicken",
+          "description": "Chicken stir-fry favorites",
+          "items": [
+            {"name": "Orange Chicken", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]},
+            {"name": "Chicken w/ Mushroom", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]},
+            {"name": "Kung Pao Chicken", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]},
+            {"name": "General Tso Chicken", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]}
+          ]
+        },
+        "stir_fry_pork": {
+          "name": "Pork",
+          "description": "Pork stir-fry favorites",
+          "items": [
+            {"name": "Sweet and Spicy Pork Ribs", "variations": [{"name": "Small", "price": 180}, {"name": "Double", "price": 279}]},
+            {"name": "Thai Pork Cashew", "variations": [{"name": "Small", "price": 149}, {"name": "Double", "price": 229}]},
+            {"name": "Spicy Pork Strips", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]},
+            {"name": "Pad Kra Pao", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]}
+          ]
+        },
+        "stir_fry_beef": {
+          "name": "Beef",
+          "description": "Beef stir-fry favorites",
+          "items": [
+            {"name": "Beef Broccoli", "variations": [{"name": "Small", "price": 149}, {"name": "Double", "price": 259}]},
+            {"name": "Beef Mushroom", "variations": [{"name": "Small", "price": 149}, {"name": "Double", "price": 259}]},
+            {"name": "Black Pepper Beef", "variations": [{"name": "Small", "price": 149}, {"name": "Double", "price": 259}]}
+          ]
+        },
+        "stir_fry_seafood": {
+          "name": "Seafood",
+          "description": "Seafood stir-fry favorites",
+          "items": [
+            {"name": "Shrimp w/ Veggie", "variations": [{"name": "Small", "price": 169}, {"name": "Double", "price": 269}]},
+            {"name": "Squid w/ Veggie", "variations": [{"name": "Small", "price": 149}, {"name": "Double", "price": 249}]}
+          ]
+        }
+      }
     },
     "grill_master": {
       "name": "Grill Master",
@@ -68,7 +74,7 @@
         {"name": "Yangchow w/ Lechon Kawali", "variations": [{"name": "Regular", "price": 145}]}
       ]
     },
-    "Silog": {
+    "short_order": {
       "name": "Silog Special",
       "description": "Quick meals and silog",
       "items": [
@@ -81,7 +87,7 @@
       ]
     },
     "noodles": {
-      "name": "Short Order",
+      "name": "Noodles",
       "description": "Fresh noodles and soups",
       "items": [
         {"name": "Chami", "variations": [{"name": "Solo", "price": 70}, {"name": "Large", "price": 220}]},
