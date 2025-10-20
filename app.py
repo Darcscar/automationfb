@@ -217,6 +217,11 @@ def show_category_items(psid, category_id):
         return call_send_api(psid, {"text": "Category not found. Please try again."})
     
     category_data = categories[category_id]
+    
+    # Handle old category structure that might not have 'items' key
+    if "items" not in category_data:
+        return call_send_api(psid, {"text": "This category is no longer available. Please browse our updated menu categories."})
+    
     items = category_data["items"]
     
     # Create quick reply buttons for items (max 13 buttons)
@@ -267,6 +272,11 @@ def show_item_variations(psid, category_id, item_name):
         return call_send_api(psid, {"text": "Category not found. Please try again."})
     
     category_data = categories[category_id]
+    
+    # Handle old category structure that might not have 'items' key
+    if "items" not in category_data:
+        return call_send_api(psid, {"text": "This category is no longer available. Please browse our updated menu categories."})
+    
     items = category_data["items"]
     
     # Find the specific item
