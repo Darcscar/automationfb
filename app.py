@@ -1,7 +1,6 @@
 """
-CATEGORY-BASED ORDERING SYSTEM - Facebook Python Base Bot for Pedro's Restaurant using Flask as framework
+CATEGORY-BASED ORDERING SYSTEM - Facebook Bot for Pedro's Restaurant
 NEW VERSION - Customers browse categories and select items instead of typing orders
-Developed BY: Darcscar
 """
 
 import os
@@ -188,13 +187,16 @@ def show_categories(psid):
     # Create quick reply buttons for categories
     quick_replies = []
     categories = category_menu["menu_categories"]
-    
-    for category_id, category_data in categories.items():
-        quick_replies.append({
-            "content_type": "text",
-            "title": category_data["name"],
-            "payload": f"CATEGORY_{category_id}"
-        })
+    # Only show parent categories in desired order
+    parent_order = ["stir_fry", "yangchow", "sizzling", "short_order", "grill_master"]
+    for category_id in parent_order:
+        if category_id in categories:
+            category_data = categories[category_id]
+            quick_replies.append({
+                "content_type": "text",
+                "title": category_data["name"],
+                "payload": f"CATEGORY_{category_id}"
+            })
     
     # Add cart and checkout options
     cart = get_user_cart(psid)
@@ -218,8 +220,10 @@ def show_categories(psid):
     })
     
     message_text = "🍽️ Choose a category to browse our menu:\n\n"
-    for category_id, category_data in categories.items():
-        message_text += f"• {category_data['name']} - {category_data['description']}\n"
+    for category_id in parent_order:
+        if category_id in categories:
+            category_data = categories[category_id]
+            message_text += f"• {category_data['name']} - {category_data.get('description', '')}\n"
     
     call_send_api(psid, {
         "text": message_text,
@@ -231,11 +235,46 @@ def show_category_items(psid, category_id):
     load_category_menu()
     
     categories = category_menu.get("menu_categories", {})
-    if category_id not in categories:
+    category_data = None
+    is_subcategory = False
+
+    # Try top-level category first
+    if category_id in categories:
+        category_data = categories[category_id]
+        else:
+        # Try resolving as a subcategory under any parent
+        for parent_id, parent_data in categories.items():
+            subcats = parent_data.get("subcategories") or {}
+            if category_id in subcats:
+                category_data = subcats[category_id]
+                is_subcategory = True
+                                break
+
+    if not category_data:
         return call_send_api(psid, {"text": "Category not found. Please try again."})
-    
-    category_data = categories[category_id]
-    items = category_data["items"]
+
+    # If this category has subcategories, show them instead of items
+    if category_data.get("subcategories"):
+        subcats = category_data["subcategories"]
+        quick_replies = []
+        for sub_id, sub_data in subcats.items():
+            quick_replies.append({
+                "content_type": "text",
+                "title": sub_data["name"],
+                "payload": f"CATEGORY_{sub_id}"
+            })
+        quick_replies.append({"content_type": "text", "title": "🔙 Back to Categories", "payload": "CATEGORIES"})
+        cart = get_user_cart(psid)
+        if cart:
+            quick_replies.append({"content_type": "text", "title": "🛒 View Cart", "payload": "VIEW_CART"})
+
+        message_text = f"🍽️ {category_data['name']}\n\nChoose a subcategory:\n\n"
+        for sub_id, sub_data in subcats.items():
+            message_text += f"• {sub_data['name']} - {sub_data.get('description', '')}\n"
+
+        return call_send_api(psid, {"text": message_text, "quick_replies": quick_replies})
+
+    items = category_data.get("items", [])
     
     # Create quick reply buttons for items (max 13 buttons)
     quick_replies = []
@@ -281,19 +320,24 @@ def show_item_variations(psid, category_id, item_name):
     load_category_menu()
     
     categories = category_menu.get("menu_categories", {})
-    if category_id not in categories:
-        return call_send_api(psid, {"text": "Category not found. Please try again."})
-    
-    category_data = categories[category_id]
-    items = category_data["items"]
-    
+    items = []
+    if category_id in categories:
+        items = categories[category_id].get("items", [])
+                        else:
+        # resolve as subcategory
+        for parent_id, parent_data in categories.items():
+            subcats = parent_data.get("subcategories") or {}
+            if category_id in subcats:
+                items = subcats[category_id].get("items", [])
+                            break
+                
     # Find the specific item
     selected_item = None
     for item in items:
         if item["name"] == item_name:
             selected_item = item
-            break
-    
+                            break
+                    
     if not selected_item:
         return call_send_api(psid, {"text": "Item not found. Please try again."})
     
@@ -302,7 +346,7 @@ def show_item_variations(psid, category_id, item_name):
     # Create quick reply buttons for variations
     quick_replies = []
     
-    for variation in variations:
+            for variation in variations:
         # Create safe names for payload
         safe_item_name = item_name.replace(" ", "_").replace("/", "_").replace("&", "and")
         safe_variation_name = variation['name'].replace(" ", "_").replace("/", "_").replace("&", "and")
@@ -313,11 +357,11 @@ def show_item_variations(psid, category_id, item_name):
         })
     
     # Add navigation buttons
-    quick_replies.append({
-        "content_type": "text",
+        quick_replies.append({
+            "content_type": "text",
         "title": "🔙 Back to Items",
         "payload": f"CATEGORY_{category_id}"
-    })
+        })
     
     quick_replies.append({
         "content_type": "text",
@@ -364,8 +408,8 @@ def show_cart(psid):
             "title": f"❌ Remove {item['item']}",
             "payload": f"REMOVE_ITEM_{item['item']}_{item['variation']}"
         })
-    
-    call_send_api(psid, {
+                
+                call_send_api(psid, {
         "text": format_cart_summary(psid),
         "quick_replies": quick_replies
     })
@@ -783,7 +827,7 @@ def webhook():
                     msg = event["message"]
                     if msg.get("quick_reply"):
                         payload = msg["quick_reply"].get("payload")
-                        handle_payload(psid, payload=payload)
+                            handle_payload(psid, payload=payload)
                     elif "text" in msg:
                         handle_payload(psid, text_message=msg.get("text", "").strip())
                 elif "postback" in event:
