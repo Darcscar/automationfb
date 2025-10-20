@@ -223,10 +223,12 @@ def show_category_items(psid, category_id):
     quick_replies = []
     
     for item in items[:10]:  # Limit to 10 items to avoid button limit
+        # Create a safe payload by replacing spaces and special characters
+        safe_name = item["name"].replace(" ", "_").replace("/", "_").replace("&", "and")
         quick_replies.append({
             "content_type": "text",
             "title": item["name"],
-            "payload": f"ITEM_{category_id}_{item['name']}"
+            "payload": f"ITEM|{category_id}|{safe_name}"
         })
     
     # Add navigation buttons
@@ -283,10 +285,13 @@ def show_item_variations(psid, category_id, item_name):
     quick_replies = []
     
     for variation in variations:
+        # Create safe names for payload
+        safe_item_name = item_name.replace(" ", "_").replace("/", "_").replace("&", "and")
+        safe_variation_name = variation['name'].replace(" ", "_").replace("/", "_").replace("&", "and")
         quick_replies.append({
             "content_type": "text",
             "title": f"{variation['name']} - ₱{variation['price']}",
-            "payload": f"ADD_ITEM_{category_id}_{item_name}_{variation['name']}_{variation['price']}"
+            "payload": f"ADD_ITEM|{category_id}|{safe_item_name}|{safe_variation_name}|{variation['price']}"
         })
     
     # Add navigation buttons
@@ -591,27 +596,54 @@ def handle_payload(psid, payload=None, text_message=None):
         return show_category_items(psid, category_id)
     
     # Handle item selection
-    if payload and payload.startswith("ITEM_"):
-        parts = payload.split("_", 2)
-        if len(parts) >= 3:
-            category_id = parts[1]
-            item_name = parts[2]
-            return show_item_variations(psid, category_id, item_name)
+    if payload and payload.startswith("ITEM|"):
+        # Remove "ITEM|" prefix and split by pipe to get category_id and safe_name
+        remaining = payload[5:]  # Remove "ITEM|"
+        parts = remaining.split("|", 1)  # Split on pipe
+        if len(parts) >= 2:
+            category_id = parts[0]
+            safe_name = parts[1]
+            
+            # Convert safe name back to original name
+            load_category_menu()
+            categories = category_menu.get("menu_categories", {})
+            if category_id in categories:
+                items = categories[category_id]["items"]
+                for item in items:
+                    item_safe_name = item["name"].replace(" ", "_").replace("/", "_").replace("&", "and")
+                    if item_safe_name == safe_name:
+                        return show_item_variations(psid, category_id, item["name"])
+            
+            return call_send_api(psid, {"text": "Item not found. Please try again."})
     
     # Handle adding item to cart
-    if payload and payload.startswith("ADD_ITEM_"):
-        parts = payload.split("_", 5)
-        if len(parts) >= 6:
-            category_id = parts[2]
-            item_name = parts[3]
-            variation_name = parts[4]
-            price = int(parts[5])
+    if payload and payload.startswith("ADD_ITEM|"):
+        parts = payload.split("|")
+        if len(parts) >= 5:
+            category_id = parts[1]
+            safe_item_name = parts[2]
+            safe_variation_name = parts[3]
+            price = int(parts[4])
             
-            add_to_cart(psid, item_name, variation_name, price)
+            # Convert safe names back to original names
+            load_category_menu()
+            categories = category_menu.get("menu_categories", {})
+            if category_id in categories:
+                items = categories[category_id]["items"]
+                for item in items:
+                    item_safe_name = item["name"].replace(" ", "_").replace("/", "_").replace("&", "and")
+                    if item_safe_name == safe_item_name:
+                        # Find the variation
+                        for variation in item["variations"]:
+                            var_safe_name = variation['name'].replace(" ", "_").replace("/", "_").replace("&", "and")
+                            if var_safe_name == safe_variation_name:
+                                add_to_cart(psid, item["name"], variation['name'], price)
+                                
+                                # Show confirmation and cart
+                                call_send_api(psid, {"text": f"✅ Added to cart: {item['name']} ({variation['name']}) - ₱{price}"})
+                                return show_cart(psid)
             
-            # Show confirmation and cart
-            call_send_api(psid, {"text": f"✅ Added to cart: {item_name} ({variation_name}) - ₱{price}"})
-            return show_cart(psid)
+            return call_send_api(psid, {"text": "Item not found. Please try again."})
     
     # Handle removing item from cart
     if payload and payload.startswith("REMOVE_ITEM_"):
@@ -714,3 +746,4 @@ if __name__ == "__main__":
     PORT = int(os.getenv("PORT", 10000))
     logger.info(f"Starting Flask app on port {PORT}...")
     app.run(host="0.0.0.0", port=PORT, debug=True)
+
