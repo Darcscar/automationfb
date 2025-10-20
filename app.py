@@ -222,33 +222,115 @@ def parse_order_items(order_text):
                 logger.info(f"Skipping '{item}' - found as substring in another word")
                 continue
             
-            # Try to extract quantity for this specific item
-            quantity = 1
+            # Check if we already found a match for this base item (avoid duplicates)
+            base_already_found = False
+            existing_item_to_replace = None
             
-            # Look for quantity words near this item
-            item_context = text_lower[max(0, item_position-20):item_position+len(item_lower)+20]
+            # Extract base item name (remove size variations)
+            base_name = item_lower
+            for variation in [" small", " double", " large", " medium", " solo", " w/ rice", " w/", " with rice", " with"]:
+                base_name = base_name.replace(variation, "")
             
-            for qty_word in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
-                if qty_word in item_context:
-                    if qty_word.isdigit():
-                        quantity = int(qty_word)
-                    elif qty_word == "two":
-                        quantity = 2
-                    elif qty_word == "three":
-                        quantity = 3
-                    elif qty_word == "four":
-                        quantity = 4
-                    elif qty_word == "five":
-                        quantity = 5
-                    break
+            for i, parsed_item in enumerate(parsed_items):
+                # Extract the item name from the parsed item
+                found_item_name = parsed_item["name"].lower()
+                
+                # Check if this is the same base item by comparing the core item name
+                # Remove size variations from both items and compare
+                found_base = found_item_name
+                for variation in [" small", " double", " large", " medium", " solo", " w/ rice", " w/", " with rice", " with"]:
+                    found_base = found_base.replace(variation, "")
+                
+                # Check if the base items are the same
+                if base_name == found_base:
+                    # Check if the current item has a customer-specified variation near this item
+                    customer_specified_variation = None
+                    # Find the position of the matched text for context
+                    item_position = text_lower.find(item_lower)
+                    
+                    if item_position >= 0:
+                        item_context = text_lower[max(0, item_position-20):item_position+len(item_lower)+20]
+                        for variation in ["small", "double", "large", "medium", "solo"]:
+                            if variation in item_context:
+                                customer_specified_variation = variation
+                                break
+                    
+                    # If customer specified a variation, prioritize that over the existing match
+                    if customer_specified_variation and customer_specified_variation in item_lower:
+                        existing_item_to_replace = i
+                        logger.info(f"Customer specified '{customer_specified_variation}', replacing '{found_item_name}' with '{item}'")
+                        break
+                    elif customer_specified_variation and customer_specified_variation not in item_lower:
+                        # Customer specified a different variation, skip this item
+                        base_already_found = True
+                        logger.info(f"Customer specified '{customer_specified_variation}', skipping '{item}' (different variation)")
+                        break
+                    else:
+                        base_already_found = True
+                        logger.info(f"Duplicate detected: '{base_name}' already found as '{found_item_name}' - skipping '{item}'")
+                        break
             
-            parsed_items.append({
-                "name": item,
-                "quantity": quantity,
-                "price": price,
-                "total": quantity * price
-            })
-            logger.info(f"Found item '{item}' with quantity {quantity} at ₱{price} each = ₱{quantity * price}")
+            if not base_already_found and existing_item_to_replace is None:
+                # Try to extract quantity for this specific item
+                quantity = 1
+                
+                # Look for quantity words near this item
+                item_context = text_lower[max(0, item_position-20):item_position+len(item_lower)+20]
+                
+                for qty_word in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
+                    if qty_word in item_context:
+                        if qty_word.isdigit():
+                            quantity = int(qty_word)
+                        elif qty_word == "two":
+                            quantity = 2
+                        elif qty_word == "three":
+                            quantity = 3
+                        elif qty_word == "four":
+                            quantity = 4
+                        elif qty_word == "five":
+                            quantity = 5
+                        break
+                
+                parsed_items.append({
+                    "name": item,
+                    "quantity": quantity,
+                    "price": price,
+                    "total": quantity * price
+                })
+                logger.info(f"Found item '{item}' with quantity {quantity} at ₱{price} each = ₱{quantity * price}")
+            elif existing_item_to_replace is not None:
+                # Replace the existing item with the customer-specified variation
+                old_item = parsed_items[existing_item_to_replace]
+                
+                # Try to extract quantity for this specific item
+                quantity = 1
+                
+                # Look for quantity words near this item
+                item_context = text_lower[max(0, item_position-20):item_position+len(item_lower)+20]
+                
+                for qty_word in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
+                    if qty_word in item_context:
+                        if qty_word.isdigit():
+                            quantity = int(qty_word)
+                        elif qty_word == "two":
+                            quantity = 2
+                        elif qty_word == "three":
+                            quantity = 3
+                        elif qty_word == "four":
+                            quantity = 4
+                        elif qty_word == "five":
+                            quantity = 5
+                        break
+                
+                parsed_items[existing_item_to_replace] = {
+                    "name": item,
+                    "quantity": quantity,
+                    "price": price,
+                    "total": quantity * price
+                }
+                logger.info(f"Replaced '{old_item['name']}' with '{item}' with quantity {quantity} at ₱{price} each = ₱{quantity * price}")
+            else:
+                logger.info(f"Skipping '{item}' - base item already found")
         
         # Try flexible matching for items with size variations
         else:
