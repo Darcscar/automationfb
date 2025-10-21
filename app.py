@@ -631,7 +631,7 @@ def send_message_with_quick_replies(psid, text):
     return call_send_api(psid, msg)
 
 def send_menu(psid):
-    menu_url = get_config_value('urls.menu', 'https://i.imgur.com/c2ir2Qy.jpeg')
+    menu_url = get_config_value('urls.menu', 'https://i.imgur.com/Y6F3gFh.jpeg')
     call_send_api(psid, {"attachment": {"type": "image", "payload": {"url": menu_url, "is_reusable": True}}})
     
     # Add return button after showing menu
@@ -642,7 +642,7 @@ def send_menu(psid):
     call_send_api(psid, {"text": "Here's our menu! 📋", "quick_replies": quick_replies})
 
 def send_foodpanda(psid):
-    foodpanda_url = get_config_value('urls.foodpanda', 'https://www.foodpanda.ph/restaurant/locg/pedros-old-manila-rd')
+    foodpanda_url = get_config_value('urls.foodpanda', 'https://www.foodpanda.ph/restaurant/locg/pedros-brgy-ibabang-dupay')
     call_send_api(psid, {
         "attachment": {
             "type": "template", 
