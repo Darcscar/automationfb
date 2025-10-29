@@ -58,7 +58,7 @@ def load_config():
                 "contact": {"phone_number": "09171505518 / (042)4215968"},
                 "urls": {
                     "foodpanda": "https://www.foodpanda.ph/restaurant/locg/pedros-old-manila-rd",
-                    "menu": "https://i.imgur.com/c2ir2Qy.jpeg",
+                    "menu": "https://i.imgur.com/NwrSeb8.jpeg",
                     "google_map": "https://maps.app.goo.gl/GQUDgxLqgW6no26X8"
                 },
                 "special_closures": {"closed_dates": []}
