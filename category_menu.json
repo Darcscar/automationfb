@@ -10,7 +10,7 @@
           "items": [
             {"name": "Orange Chicken", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]},
             {"name": "Chicken w/ Mushroom", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]},
-            {"name": "Kung Pao Chicken", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]},
+            {"name": "Kung Pao Chicken", "variations": [{"name": "Small", "price": 149}, {"name": "Double", "price": 229}]},
             {"name": "General Tso Chicken", "variations": [{"name": "Small", "price": 129}, {"name": "Double", "price": 210}]}
           ]
         },
@@ -37,7 +37,7 @@
           "name": "Seafood",
           "description": "Seafood stir-fry favorites",
           "items": [
-            {"name": "Shrimp w/ Veggie", "variations": [{"name": "Small", "price": 169}, {"name": "Double", "price": 269}]},
+            {"name": "Stir fry Squid with Bell Pepper", "variations": [{"name": "Small", "price": 169}, {"name": "Double", "price": 269}]},
             {"name": "Squid w/ Veggie", "variations": [{"name": "Small", "price": 149}, {"name": "Double", "price": 249}]}
           ]
         }
@@ -49,7 +49,9 @@
       "items": [
         {"name": "Vietnamese Chicken", "variations": [{"name": "w/ Rice", "price": 145}, {"name": "Ala Carte", "price": 120}]},
         {"name": "PeriPeri Chicken", "variations": [{"name": "w/ Rice", "price": 155}, {"name": "Ala Carte", "price": 135}]},
-        {"name": "Grilled Liempo", "variations": [{"name": "w/ Rice", "price": 165}, {"name": "Ala Carte", "price": 145}]}
+        {"name": "Grilled Liempo", "variations": [{"name": "w/ Rice", "price": 165}, {"name": "Ala Carte", "price": 145}]},
+        {"name": "Bacolod Chicken Paa", "variations": [{"name": "w/ Rice", "price": 145}, {"name": "Ala Carte", "price": 125}]},
+        {"name": "Bacolod Chicken Pecho", "variations": [{"name": "w/ Rice", "price": 155}, {"name": "Ala Carte", "price": 135}]}
       ]
     },
     "sizzling": {
